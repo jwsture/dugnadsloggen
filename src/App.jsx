@@ -16,6 +16,11 @@ const C = {
   dempet: "#6B7A80",
 };
 
+// Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
+// Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
+const APP_VERSJON = "2.1";
+const APP_OPPDATERT = "20.06.2026";
+
 const AKT_STANDARD = [
   "Båtvedlikehold",
   "Naust og anlegg",
@@ -941,6 +946,9 @@ function Innlogging({ logo, stil }) {
         </div>
         <p style={{ color: "rgba(247,245,240,0.55)", fontSize: 12, textAlign: "center", marginTop: 14 }}>
           Pålogging og passord håndteres trygt av Supabase.
+        </p>
+        <p style={{ color: "rgba(247,245,240,0.35)", fontSize: 11, textAlign: "center", marginTop: 4 }}>
+          v{APP_VERSJON} — {APP_OPPDATERT}
         </p>
       </div>
     </div>
@@ -2331,6 +2339,15 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
+      {/* Versjon — gjør det enkelt å se om en oppdatering har slått gjennom */}
+      <div style={{ ...kort, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, background: C.kritt }}>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: C.dempet, fontWeight: 700 }}>App-versjon</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.tjaere }}>v{APP_VERSJON} <span style={{ fontWeight: 400, color: C.dempet, fontSize: 13 }}>— oppdatert {APP_OPPDATERT}</span></div>
+        </div>
+        <span style={{ fontSize: 11, color: C.dempet }}>Ser du dette tallet endre seg etter «npm run deploy», har oppdateringen slått gjennom.</span>
+      </div>
+
       {/* Sikkerhetskopi */}
       <div style={{ ...kort, borderLeft: `4px solid ${C.signal}` }}>
         <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Sikkerhetskopi</h2>
