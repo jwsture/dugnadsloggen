@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "2.1";
+const APP_VERSJON = "2.2";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -2229,6 +2229,8 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
   const [nyttObjektType, setNyttObjektType] = useState("lokale");
   const [lagring, setLagring] = useState(null);
   const [regnerLagring, setRegnerLagring] = useState(false);
+  const [autoBackuper, setAutoBackuper] = useState(null);
+  const [henterAutoBackuper, setHenterAutoBackuper] = useState(false);
   const timerFor = (mid) => innslag.filter((i) => i.medlemId === mid).reduce((s, i) => s + i.timer, 0);
   const backupIDag = sisteBackup === iDag();
 
@@ -2288,6 +2290,45 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
       await onBackupTatt();
     } finally {
       setJobber(false);
+    }
+  }
+
+  async function hentAutoBackuper() {
+    setHenterAutoBackuper(true);
+    try {
+      const { data, error } = await supabase
+        .from("sikkerhetskopier")
+        .select("id, laget")
+        .order("laget", { ascending: false })
+        .limit(7);
+      if (error) throw error;
+      setAutoBackuper(data || []);
+    } catch (e) {
+      console.error("Kunne ikke hente automatiske sikkerhetskopier:", e);
+      await varsle(`Kunne ikke hente automatiske sikkerhetskopier: ${e?.message || "ukjent feil"}. Er supabase-automatisk-backup.sql kjørt i Supabase?`);
+      setAutoBackuper([]);
+    } finally {
+      setHenterAutoBackuper(false);
+    }
+  }
+
+  async function lastNedAutoBackup(id, laget) {
+    try {
+      const { data, error } = await supabase
+        .from("sikkerhetskopier")
+        .select("innhold")
+        .eq("id", id)
+        .single();
+      if (error) throw error;
+      const dato = new Date(laget).toISOString().slice(0, 10);
+      const pakke = {
+        app: "Dugnadsloggen Askøy Kystlag (automatisk nattlig kopi)",
+        laget,
+        ...data.innhold,
+      };
+      lastNedFil(JSON.stringify(pakke), `auto-sikkerhetskopi-${dato}.json`, "application/json");
+    } catch (e) {
+      await varsle(`Kunne ikke laste ned denne kopien: ${e?.message || "ukjent feil"}.`);
     }
   }
 
@@ -2389,6 +2430,36 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
             </div>
           )}
         </div>
+      </div>
+
+      {/* Automatisk nattlig sikkerhetskopi */}
+      <div style={kort}>
+        <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Automatisk sikkerhetskopi</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
+          Databasen tar selv en full kopi av alt innhold hver natt, og beholder de siste 7 dagene automatisk — ingen
+          trenger å huske på noe. Vil dere ha en kopi liggende utenfor databasen (f.eks. på Google Disk), last ned
+          en av kopiene under og legg den i mappa deres.
+        </p>
+        <button style={{ ...sekKnapp, padding: "7px 14px", fontSize: 13 }} disabled={henterAutoBackuper} onClick={hentAutoBackuper}>
+          {henterAutoBackuper ? "Henter …" : autoBackuper ? "Oppdater listen" : "Vis automatiske kopier"}
+        </button>
+        {autoBackuper && autoBackuper.length === 0 && (
+          <p style={{ marginTop: 10, fontSize: 13, color: C.dempet }}>
+            Ingen automatiske kopier funnet ennå. Er <code>supabase-automatisk-backup.sql</code> kjørt i Supabase? Den første kopien tas neste natt — eller med en gang hvis dere kjørte den siste linja i skriptet.
+          </p>
+        )}
+        {autoBackuper && autoBackuper.length > 0 && (
+          <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+            {autoBackuper.map((b) => (
+              <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", background: C.kritt, borderRadius: 6, fontSize: 13 }}>
+                <span>{new Date(b.laget).toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}</span>
+                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => lastNedAutoBackup(b.id, b.laget)}>
+                  ⬇ Last ned
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Aktiviteter */}
