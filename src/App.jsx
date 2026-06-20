@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "2.3";
+const APP_VERSJON = "2.5";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -414,8 +414,7 @@ export default function Dugnadsloggen() {
                 ? <img src={logo} alt="Askøy Kystlag" style={{ height: 42, width: 42, objectFit: "contain", borderRadius: 8, background: "#fff", padding: 2 }} />
                 : <Lagsmerke size={42} lys />}
               <div>
-                <div style={{ fontSize: 10.5, letterSpacing: "0.25em", textTransform: "uppercase", color: C.sjogronn }}>Askøy Kystlag</div>
-                <h1 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 23, fontWeight: 700 }}>Dugnadsloggen</h1>
+                <h1 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 700 }}>Askøy Kystlag</h1>
               </div>
             </div>
             <button onClick={async () => { await supabase.auth.signOut(); setBruker(null); setFane("timer"); setAapent(null); }}
@@ -890,8 +889,7 @@ function Innlogging({ logo, stil }) {
               ? <img src={logo} alt="Askøy Kystlag" style={{ height: 76, width: 76, objectFit: "contain", borderRadius: 12, background: "#fff", padding: 5 }} />
               : <Lagsmerke size={76} lys />}
           </div>
-          <div style={{ fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", color: C.sjogronn }}>Askøy Kystlag</div>
-          <h1 style={{ margin: "4px 0 0", fontFamily: "Georgia, serif", fontSize: 32 }}>Dugnadsloggen</h1>
+          <h1 style={{ margin: "4px 0 0", fontFamily: "Georgia, serif", fontSize: 36 }}>Askøy Kystlag</h1>
         </div>
         <div style={{ ...kort, padding: 22 }}>
           {feil && <div style={{ background: "#FBEAE8", border: `1px solid ${C.signal}`, color: C.signal, padding: "9px 12px", borderRadius: 6, marginBottom: 14, fontSize: 14 }}>{feil}</div>}
@@ -2314,7 +2312,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
     }
   }
 
-  async function lastNedAutoBackup(id, laget) {
+  async function lastNedAutoBackup(id, laget, medBilder) {
     try {
       const { data, error } = await supabase
         .from("sikkerhetskopier")
@@ -2328,7 +2326,22 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
         laget,
         ...data.innhold,
       };
-      lastNedFil(JSON.stringify(pakke), `auto-sikkerhetskopi-${dato}.json`, "application/json");
+
+      if (medBilder) {
+        // Finn bildene fra samme natt (nærmeste kjøring_id til samme klokkeslett)
+        const { data: bilder, error: feilBilder } = await supabase
+          .from("sikkerhetskopier_bilder")
+          .select("nokkel, innhold, laget")
+          .gte("laget", new Date(new Date(laget).getTime() - 6 * 3600 * 1000).toISOString())
+          .lte("laget", new Date(new Date(laget).getTime() + 6 * 3600 * 1000).toISOString());
+        if (feilBilder) {
+          await varsle(`Fant ikke bildebackup for denne natten: ${feilBilder.message}. Er supabase-automatisk-backup-bilder.sql kjørt? Laster ned uten bilder.`);
+        } else {
+          pakke.foto = (bilder || []).map((b) => ({ nokkel: b.nokkel, innhold: JSON.parse(b.innhold) }));
+        }
+      }
+
+      lastNedFil(JSON.stringify(pakke), `auto-sikkerhetskopi-${dato}${medBilder ? "-med-bilder" : ""}.json`, "application/json");
     } catch (e) {
       await varsle(`Kunne ikke laste ned denne kopien: ${e?.message || "ukjent feil"}.`);
     }
@@ -2438,9 +2451,9 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
       <div style={kort}>
         <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Automatisk sikkerhetskopi</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
-          Databasen tar selv en full kopi av alt innhold hver natt, og beholder de siste 7 dagene automatisk — ingen
-          trenger å huske på noe. Vil dere ha en kopi liggende utenfor databasen (f.eks. på Google Disk), last ned
-          en av kopiene under og legg den i mappa deres.
+          Databasen tar selv en full kopi av alt innhold hver natt — inkludert bilder — og beholder de siste 7 dagene
+          automatisk. Ingen trenger å huske på noe. Vil dere ha en kopi liggende utenfor databasen (f.eks. på Google
+          Disk), last ned en av kopiene under og legg den i mappa deres.
         </p>
         <button style={{ ...sekKnapp, padding: "7px 14px", fontSize: 13 }} disabled={henterAutoBackuper} onClick={hentAutoBackuper}>
           {henterAutoBackuper ? "Henter …" : autoBackuper ? "Oppdater listen" : "Vis automatiske kopier"}
@@ -2453,11 +2466,16 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
         {autoBackuper && autoBackuper.length > 0 && (
           <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
             {autoBackuper.map((b) => (
-              <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", background: C.kritt, borderRadius: 6, fontSize: 13 }}>
+              <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 10px", background: C.kritt, borderRadius: 6, fontSize: 13, flexWrap: "wrap", gap: 6 }}>
                 <span>{new Date(b.laget).toLocaleString("nb-NO", { dateStyle: "long", timeStyle: "short" })}</span>
-                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => lastNedAutoBackup(b.id, b.laget)}>
-                  ⬇ Last ned
-                </button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => lastNedAutoBackup(b.id, b.laget, false)}>
+                    ⬇ Uten bilder
+                  </button>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => lastNedAutoBackup(b.id, b.laget, true)}>
+                    ⬇ Med bilder
+                  </button>
+                </div>
               </div>
             ))}
           </div>
