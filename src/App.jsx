@@ -158,81 +158,107 @@ export default function Dugnadsloggen() {
     return () => lytter.subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    (async () => {
+  // Henter alt innhold fra Supabase. Kjøres når brukeren er innlogget (session finnes),
+  // og kan kalles på nytt for å hente oppdateringer andre har gjort (f.eks. nye medlemmer).
+  async function hentAlt() {
+    try {
+      let meta = null;
       try {
-        let meta = null;
-        try {
-          const r = await window.storage.get(K_META, true);
-          if (r?.value) meta = JSON.parse(r.value);
-        } catch (e) { /* finnes ikke ennå */ }
+        const r = await window.storage.get(K_META, true);
+        if (r?.value) meta = JSON.parse(r.value);
+      } catch (e) { /* finnes ikke ennå */ }
 
-        if (!meta) {
-          let gamle = { medlemmer: [], innslag: [] };
-          try {
-            const g = await window.storage.get(K_GAMMEL, true);
-            if (g?.value) gamle = JSON.parse(g.value);
-          } catch (e) { /* ingen gammel data */ }
-          meta = {
-            medlemmer: (gamle.medlemmer || []).map((m, idx) => ({ id: m.id, navn: m.navn, pin: null, admin: idx === 0, epost: "" })),
-          };
-          await window.storage.set(K_META, JSON.stringify(meta), true);
-          if (gamle.innslag?.length) await window.storage.set(K_INNSLAG, JSON.stringify(gamle.innslag), true);
-        }
-        setMedlemmer(meta.medlemmer || []);
-
-        for (const [nokkel, sett] of [[K_PROSJEKT, setProsjekter], [K_INNSLAG, setInnslag], [K_DUGNAD, setDugnader]]) {
-          try {
-            const r = await window.storage.get(nokkel, true);
-            if (r?.value) sett(JSON.parse(r.value));
-          } catch (e) { /* tomt */ }
-        }
+      if (!meta) {
+        let gamle = { medlemmer: [], innslag: [] };
         try {
-          const r = await window.storage.get(K_AKT, true);
-          if (r?.value) {
-            const liste = JSON.parse(r.value);
-            if (Array.isArray(liste) && liste.length) setAktiviteter(liste);
-          }
-        } catch (e) { /* bruker standardliste */ }
-        try {
-          const r = await window.storage.get(K_UTLEIE, true);
-          if (r?.value) {
-            let u = JSON.parse(r.value);
-            if (!u.objekter) {
-              // Migrer fra v7-format (to faste lokaler) til fleksibel objektliste
-              const objekter = (u.lokaler?.length ? u.lokaler : UTLEIE_STANDARD.objekter.map((o) => o.navn))
-                .map((n, idx) => ({ id: idx === 0 ? "lokale-a" : idx === 1 ? "lokale-b" : nyId(), navn: n, type: "lokale" }));
-              const bookinger = (u.bookinger || []).map((b) => {
-                if (b.type === "lokale0") return { ...b, objektId: objekter[0]?.id || null, type: "lokale" };
-                if (b.type === "lokale1") return { ...b, objektId: objekter[1]?.id || objekter[0]?.id || null, type: "lokale" };
-                return b;
-              });
-              u = { objekter, bookinger, kassererId: null };
-              await window.storage.set(K_UTLEIE, JSON.stringify(u), true);
-            }
-            setUtleie({ objekter: u.objekter || [], bookinger: u.bookinger || [], kassererId: u.kassererId || null });
-          }
-        } catch (e) { /* ingen utleiedata ennå */ }
-        try {
-          const r = await window.storage.get(K_BACKUPINFO, true);
-          if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
-        } catch (e) { /* ingen backup tatt ennå */ }
-        try {
-          const r = await window.storage.get(K_LOGO, true);
-          if (r?.value) setLogo(JSON.parse(r.value).dataUrl);
-        } catch (e) { /* ingen logo */ }
-      } catch (e) {
-        setFeil("Klarte ikke å hente loggboka. Last siden på nytt.");
-      } finally {
-        setLaster(false);
+          const g = await window.storage.get(K_GAMMEL, true);
+          if (g?.value) gamle = JSON.parse(g.value);
+        } catch (e) { /* ingen gammel data */ }
+        meta = {
+          medlemmer: (gamle.medlemmer || []).map((m, idx) => ({ id: m.id, navn: m.navn, pin: null, admin: idx === 0, epost: "" })),
+        };
+        await window.storage.set(K_META, JSON.stringify(meta), true);
+        if (gamle.innslag?.length) await window.storage.set(K_INNSLAG, JSON.stringify(gamle.innslag), true);
       }
-    })();
-  }, []);
+      setMedlemmer(meta.medlemmer || []);
+
+      for (const [nokkel, sett] of [[K_PROSJEKT, setProsjekter], [K_INNSLAG, setInnslag], [K_DUGNAD, setDugnader]]) {
+        try {
+          const r = await window.storage.get(nokkel, true);
+          if (r?.value) sett(JSON.parse(r.value));
+        } catch (e) { /* tomt */ }
+      }
+      try {
+        const r = await window.storage.get(K_AKT, true);
+        if (r?.value) {
+          const liste = JSON.parse(r.value);
+          if (Array.isArray(liste) && liste.length) setAktiviteter(liste);
+        }
+      } catch (e) { /* bruker standardliste */ }
+      try {
+        const r = await window.storage.get(K_UTLEIE, true);
+        if (r?.value) {
+          let u = JSON.parse(r.value);
+          if (!u.objekter) {
+            // Migrer fra v7-format (to faste lokaler) til fleksibel objektliste
+            const objekter = (u.lokaler?.length ? u.lokaler : UTLEIE_STANDARD.objekter.map((o) => o.navn))
+              .map((n, idx) => ({ id: idx === 0 ? "lokale-a" : idx === 1 ? "lokale-b" : nyId(), navn: n, type: "lokale" }));
+            const bookinger = (u.bookinger || []).map((b) => {
+              if (b.type === "lokale0") return { ...b, objektId: objekter[0]?.id || null, type: "lokale" };
+              if (b.type === "lokale1") return { ...b, objektId: objekter[1]?.id || objekter[0]?.id || null, type: "lokale" };
+              return b;
+            });
+            u = { objekter, bookinger, kassererId: null };
+            await window.storage.set(K_UTLEIE, JSON.stringify(u), true);
+          }
+          setUtleie({ objekter: u.objekter || [], bookinger: u.bookinger || [], kassererId: u.kassererId || null });
+        }
+      } catch (e) { /* ingen utleiedata ennå */ }
+      try {
+        const r = await window.storage.get(K_BACKUPINFO, true);
+        if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
+      } catch (e) { /* ingen backup tatt ennå */ }
+      try {
+        const r = await window.storage.get(K_LOGO, true);
+        if (r?.value) setLogo(JSON.parse(r.value).dataUrl);
+      } catch (e) { /* ingen logo */ }
+    } catch (e) {
+      setFeil("Klarte ikke å hente loggboka. Last siden på nytt.");
+    } finally {
+      setLaster(false);
+    }
+  }
+
+  // VIKTIG: data hentes først når sesjonen er bekreftet innlogget — Supabase
+  // avviser forespørsler fra ikke-innloggede, så å hente før innlogging ga tom/feil data.
+  useEffect(() => {
+    if (sjekkerSesjon) return; // vent til vi vet om noen er innlogget
+    if (!session) { setLaster(false); return; } // ingen innlogget ennå — vis innloggingssiden
+    setLaster(true);
+    hentAlt();
+  }, [sjekkerSesjon, session?.user?.id]);
+
+  // Hent data på nytt med jevne mellomrom mens noen er innlogget, slik at endringer
+  // andre medlemmer gjør (nye registreringer, nye medlemmer, andres timer) dukker opp
+  // uten at man må laste siden manuelt.
+  useEffect(() => {
+    if (!session) return;
+    const id = setInterval(() => { hentAlt(); }, 30000);
+    return () => clearInterval(id);
+  }, [session?.user?.id]);
+
 
   const lagre = (nokkel, settState, feilmelding) => async (data) => {
     settState(data);
-    try { await window.storage.set(nokkel, JSON.stringify(nokkel === K_META ? { medlemmer: data } : data), true); }
-    catch (e) { setFeil(feilmelding); }
+    try {
+      await window.storage.set(nokkel, JSON.stringify(nokkel === K_META ? { medlemmer: data } : data), true);
+    } catch (e) {
+      // Ikke vis feil for aktivitetslisten og backupinfo — det er ikke kritisk
+      if (nokkel !== K_AKT && nokkel !== K_BACKUPINFO) {
+        console.error(feilmelding, e);
+        setFeil(`${feilmelding} (${e?.message || "ukjent feil"})`);
+      }
+    }
   };
   const lagreMeta = lagre(K_META, setMedlemmer, "Kunne ikke lagre medlemsdata.");
   const lagreProsjekter = lagre(K_PROSJEKT, setProsjekter, "Kunne ikke lagre prosjektet.");
@@ -269,20 +295,57 @@ export default function Dugnadsloggen() {
     }
   }
 
-  // Koble innlogget Supabase-bruker til et medlem (via e-post)
+  // Koble innlogget Supabase-bruker til et medlem (via e-post).
+  // Henter nyeste medlemsliste rett før vi eventuelt legger til et nytt medlem,
+  // slik at to personer som registrerer seg samtidig ikke overskriver hverandre.
   useEffect(() => {
     if (laster || !session?.user?.email || bruker) return;
     const epost = session.user.email.toLowerCase();
     const funnet = medlemmer.find((m) => (m.epost || "").toLowerCase() === epost);
     if (funnet) {
+      if (funnet.blokkert) {
+        supabase.auth.signOut();
+        setFeil("Denne brukeren er blokkert av en administrator. Ta kontakt med laget hvis du tror dette er en feil.");
+        return;
+      }
       setBruker({ id: funnet.id, navn: funnet.navn });
-    } else {
-      // Første gang denne e-posten logger inn: opprett medlem
-      const navn = session.user.user_metadata?.navn?.trim() || epost.split("@")[0];
-      const ny = { id: nyId(), navn, epost, pin: "", admin: medlemmer.length === 0 };
-      lagreMeta([...medlemmer, ny]).then(() => setBruker({ id: ny.id, navn: ny.navn }));
+      return;
     }
+    // Første gang denne e-posten logger inn: hent ferskeste liste og legg til medlemmet trygt
+    (async () => {
+      let naavaerende = medlemmer;
+      try {
+        const r = await window.storage.get(K_META, true);
+        if (r?.value) naavaerende = JSON.parse(r.value).medlemmer || medlemmer;
+      } catch (e) { /* bruk det vi allerede har */ }
+      const finnesAllerede = naavaerende.find((m) => (m.epost || "").toLowerCase() === epost);
+      if (finnesAllerede) {
+        setMedlemmer(naavaerende);
+        if (finnesAllerede.blokkert) {
+          supabase.auth.signOut();
+          setFeil("Denne brukeren er blokkert av en administrator. Ta kontakt med laget hvis du tror dette er en feil.");
+          return;
+        }
+        setBruker({ id: finnesAllerede.id, navn: finnesAllerede.navn });
+        return;
+      }
+      const navn = session.user.user_metadata?.navn?.trim() || epost.split("@")[0];
+      const ny = { id: nyId(), navn, epost, pin: "", admin: naavaerende.length === 0 };
+      await lagreMeta([...naavaerende, ny]);
+      setBruker({ id: ny.id, navn: ny.navn });
+    })();
   }, [laster, session, medlemmer, bruker]);
+
+  // Hvis admin blokkerer den innloggede brukeren mens de sitter inne, logges de ut med en gang
+  useEffect(() => {
+    if (!bruker) return;
+    const mitt = medlemmer.find((m) => m.id === bruker.id);
+    if (mitt?.blokkert) {
+      supabase.auth.signOut();
+      setBruker(null);
+      setFeil("Du er blokkert av en administrator.");
+    }
+  }, [medlemmer, bruker]);
 
   // ---------- Felles stil ----------
   const input = { width: "100%", padding: "10px 12px", border: `1px solid ${C.sand}`, borderRadius: 6, background: "#fff", color: C.tjaere, fontSize: 16, boxSizing: "border-box" };
@@ -550,7 +613,10 @@ export default function Dugnadsloggen() {
                 await window.storage.set(K_LOGO, JSON.stringify({ dataUrl }), true);
                 setLogo(dataUrl);
                 setInfo("Logoen er lagret og vises nå i hele appen.");
-              } catch (e) { setFeil("Kunne ikke lagre logoen. Prøv en mindre fil."); }
+              } catch (e) {
+                console.error("Kunne ikke lagre logo:", e);
+                setFeil(`Kunne ikke lagre logoen: ${e?.message || "ukjent feil"}.`);
+              }
             }}
             onGjenopprett={async (data) => {
               try {
@@ -2244,10 +2310,11 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
     e.target.value = "";
     if (!fil) return;
     try {
-      const dataUrl = await lesOgKomprimer(fil, 300, 0.85);
+      const dataUrl = await lesOgKomprimer(fil, 280, 0.8);
       await onLagreLogo(dataUrl);
     } catch (err) {
-      await varsle("Kunne ikke lese bildefilen.");
+      console.error("Logo-feil:", err);
+      await varsle(`Kunne ikke laste opp logoen: ${err?.message || "ukjent feil"}. Prøv et mindre bilde (under 2 MB) i JPG eller PNG-format.`);
     }
   }
 
@@ -2415,7 +2482,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
       <div style={kort}>
         <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Medlemmer</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
-          Dere kan ha så mange admin dere vil. «Prosjektrettigheter» lar et medlem opprette prosjekter, «utleierettigheter» lar dem legge inn utleie — uten å være admin. «Send nytt passord» sender medlemmet en e-post for å lage nytt passord.
+          Dere kan ha så mange admin dere vil. «Prosjektrettigheter» lar et medlem opprette prosjekter, «utleierettigheter» lar dem legge inn utleie — uten å være admin. «Send nytt passord» sender medlemmet en e-post for å lage nytt passord. «Blokker» stenger noen ute fra å logge inn, men timer, prosjekter og bilder de har lagt inn blir værende i loggen og rapportene.
         </p>
         {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
           <div key={m.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
@@ -2425,6 +2492,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                 {m.admin && <span style={{ marginLeft: 8, fontSize: 11, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
                 {!m.admin && m.kanProsjekt && <span style={{ marginLeft: 8, fontSize: 11, background: C.sjogronn, color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>PROSJEKT</span>}
                 {!m.admin && m.kanUtleie && <span style={{ marginLeft: 8, fontSize: 11, background: "#7A5C3E", color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>UTLEIE</span>}
+                {m.blokkert && <span style={{ marginLeft: 8, fontSize: 11, background: C.signal, color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>BLOKKERT</span>}
                 <div style={{ fontSize: 12, color: C.dempet }}>
                   {tall(timerFor(m.id))} t · {m.epost || "ingen e-post"}
                 </div>
@@ -2458,6 +2526,18 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                   <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }}
                     onClick={() => onLagreMeta(medlemmer.map((x) => x.id === m.id ? { ...x, admin: !x.admin } : x))}>
                     {m.admin ? "Fjern admin" : "Gjør til admin"}
+                  </button>
+                )}
+                {m.id !== bruker.id && !m.admin && (
+                  <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: m.blokkert ? "#4E7E5B" : C.signal, color: m.blokkert ? "#2F5A3C" : C.signal }}
+                    onClick={async () => {
+                      const melding = m.blokkert
+                        ? `Gjenåpne tilgangen for ${m.navn}?`
+                        : `Blokkere ${m.navn}? De får ikke logge inn igjen, men timer, prosjekter og bilder de har lagt inn beholdes i loggen og rapportene.`;
+                      if (!(await bekreft(melding))) return;
+                      onLagreMeta(medlemmer.map((x) => x.id === m.id ? { ...x, blokkert: !x.blokkert } : x));
+                    }}>
+                    {m.blokkert ? "Gjenåpne tilgang" : "Blokker"}
                   </button>
                 )}
                 {m.id !== bruker.id && (
@@ -2553,6 +2633,9 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [viserSkjema, setViserSkjema] = useState(false);
   const [viserTidligere, setViserTidligere] = useState(false);
   const [redigerId, setRedigerId] = useState(null);
+  const [viserInnstillinger, setViserInnstillinger] = useState(false);
+  const [nyttObjektNavn, setNyttObjektNavn] = useState("");
+  const [nyttObjektType, setNyttObjektType] = useState("lokale");
 
   // Skjemafelter for ny/redigert booking
   const [objektId, setObjektId] = useState("");
@@ -2860,10 +2943,71 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
             ? <>Leieinntekter i {aaret}: <strong style={{ color: C.tjaere }}>{tall(inntektIAar)} kr</strong> (av bookinger med pris)</>
             : `Utleiekalender for lokaler og båter (${objekter.length} objekter).`}
         </span>
-        <span style={{ fontSize: 12, color: C.dempet }}>
-          Objekter og kasserer styres i Admin-fanen
-        </span>
+        {kanRedigere ? (
+          <button onClick={() => setViserInnstillinger(!viserInnstillinger)} style={{ background: "none", border: "none", color: C.hav, textDecoration: "underline", cursor: "pointer", fontSize: 13 }}>
+            {viserInnstillinger ? "Lukk innstillinger" : "Objekter og kasserer"}
+          </button>
+        ) : (
+          <span style={{ fontSize: 12, color: C.dempet }}>Objekter og kasserer styres av admin og utleieansvarlige</span>
+        )}
       </div>
+
+      {kanRedigere && viserInnstillinger && (
+        <div style={{ ...kort, display: "grid", gap: 14 }}>
+          <div>
+            <h3 style={{ margin: "0 0 8px", fontFamily: "Georgia, serif", fontSize: 16 }}>Utleieobjekter</h3>
+            {objekter.length === 0 && <p style={{ color: C.dempet, fontSize: 13, margin: "0 0 8px" }}>Ingen objekter ennå — legg til lokaler og båter under.</p>}
+            {objekter.map((o) => (
+              <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${C.sand}` }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{ikon(o.type)} {o.navn}</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={async () => {
+                    const ny = await sporsmaal(`Nytt navn for «${o.navn}»:`, o.navn);
+                    if (!ny || !ny.trim() || ny.trim() === o.navn) return;
+                    onLagreUtleie({ ...utleie, objekter: objekter.map((x) => (x.id === o.id ? { ...x, navn: ny.trim() } : x)) });
+                  }}>Endre navn</button>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }} onClick={async () => {
+                    const harBookinger = bookinger.some((b) => b.objektId === o.id);
+                    if (!(await bekreft(`Fjerne «${o.navn}» fra utleielisten?${harBookinger ? " Eksisterende bookinger beholdes med navnet." : ""}`))) return;
+                    onLagreUtleie({ ...utleie, objekter: objekter.filter((x) => x.id !== o.id) });
+                  }}>Fjern</button>
+                </div>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <input style={{ ...input, flex: 2, minWidth: 150 }} value={nyttObjektNavn} onChange={(e) => setNyttObjektNavn(e.target.value)} placeholder="Navn, f.eks. Sjøhuset eller «Havfruen»" />
+              <select style={{ ...input, flex: 1, minWidth: 110 }} value={nyttObjektType} onChange={(e) => setNyttObjektType(e.target.value)}>
+                <option value="lokale">🏠 Lokale</option>
+                <option value="baat">⛵ Båt</option>
+              </select>
+              <button style={{ ...sekKnapp, padding: "8px 14px" }} onClick={() => {
+                const n = nyttObjektNavn.trim();
+                if (n.length < 2) return;
+                onLagreUtleie({ ...utleie, objekter: [...objekter, { id: nyId(), navn: n, type: nyttObjektType }] });
+                setNyttObjektNavn("");
+              }}>Legg til</button>
+            </div>
+          </div>
+
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 16 }}>Kasserer</h3>
+            <p style={{ margin: "0 0 8px", fontSize: 13, color: C.dempet }}>
+              Faktureringsgrunnlaget sendes på e-post hit når en utleie markeres gjennomført.
+            </p>
+            <select style={input} value={utleie.kassererId || ""} onChange={(e) => onLagreUtleie({ ...utleie, kassererId: e.target.value || null })}>
+              <option value="">Velg kasserer …</option>
+              {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                <option key={m.id} value={m.id}>{m.navn}{m.epost ? ` (${m.epost})` : " — mangler e-post!"}</option>
+              ))}
+            </select>
+            {kasserer && !kasserer.epost && (
+              <p style={{ margin: "6px 0 0", fontSize: 12.5, color: C.signal, fontWeight: 600 }}>
+                ⚠ {kasserer.navn} har ikke registrert e-post.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Ny booking */}
       {!kanRedigere && (

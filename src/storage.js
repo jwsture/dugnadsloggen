@@ -1,9 +1,7 @@
 import { supabase } from "./supabase.js";
 
-// Dette laget gir samme API som den gamle window.storage (get/set/delete/list),
-// men lagrer alt i Supabase-tabellen "lagring" (nøkkel/verdi).
-// Bilder lagres som tekst (base64) i samme tabell — enkelt og pålitelig.
-// Tabellen tåler store tekstverdier, og appen komprimerer bildene før lagring.
+// Lagringslag: samme API som window.storage, men bruker Supabase.
+// Alt lagres i tabellen "lagring" (nokkel/verdi).
 
 export const storage = {
   async get(key) {
@@ -18,13 +16,19 @@ export const storage = {
   },
 
   async set(key, value) {
-    const { error } = await supabase.from("lagring").upsert({ nokkel: key, verdi: value });
+    // onConflict: "nokkel" sørger for at upsert alltid virker
+    const { error } = await supabase
+      .from("lagring")
+      .upsert({ nokkel: key, verdi: value }, { onConflict: "nokkel" });
     if (error) throw error;
     return { key, value, shared: true };
   },
 
   async delete(key) {
-    const { error } = await supabase.from("lagring").delete().eq("nokkel", key);
+    const { error } = await supabase
+      .from("lagring")
+      .delete()
+      .eq("nokkel", key);
     if (error) throw error;
     return { key, deleted: true, shared: true };
   },
@@ -34,6 +38,10 @@ export const storage = {
     if (prefix) q = q.like("nokkel", `${prefix}%`);
     const { data, error } = await q;
     if (error) throw error;
-    return { keys: (data || []).map((r) => ({ key: r.nokkel })), prefix, shared: true };
+    return {
+      keys: (data || []).map((r) => ({ key: r.nokkel })),
+      prefix,
+      shared: true,
+    };
   },
 };
