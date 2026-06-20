@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 // │  Finnes i Supabase: Project Settings → API                  │
 // └─────────────────────────────────────────────────────────────┘
 export const SUPABASE_URL = "https://knlohksentudpixtocjk.supabase.co";
-export const SUPABASE_ANON_KEY = "sb_publishable_xh6aCYhU2zbUJNhhi6l_Og_5v66EvdW";
+export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtubG9oa3NlbnR1ZHBpeHRvY2prIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MzcxODQsImV4cCI6MjA5NzMxMzE4NH0.ehBbgxo9yMe2q8LbCYT-TTRAzWHOqEQDay5R5ENNprk";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
