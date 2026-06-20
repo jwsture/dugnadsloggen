@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "2.2";
+const APP_VERSJON = "2.3";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -49,6 +49,8 @@ const UTLEIE_STANDARD = {
   ],
   bookinger: [],
   kassererId: null,
+  alleSerUtleie: false,
+  ledere: [], // utleieansvarlige — i tillegg til admin
 };
 const FOTO_ALLE = "akl-foto:";
 const fotoPrefiks = (pid) => `akl-foto:${pid}:`;
@@ -216,7 +218,7 @@ export default function Dugnadsloggen() {
             u = { objekter, bookinger, kassererId: null };
             await window.storage.set(K_UTLEIE, JSON.stringify(u), true);
           }
-          setUtleie({ objekter: u.objekter || [], bookinger: u.bookinger || [], kassererId: u.kassererId || null });
+          setUtleie({ objekter: u.objekter || [], bookinger: u.bookinger || [], kassererId: u.kassererId || null, alleSerUtleie: !!u.alleSerUtleie, ledere: u.ledere || [] });
         }
       } catch (e) { /* ingen utleiedata ennå */ }
       try {
@@ -386,7 +388,7 @@ export default function Dugnadsloggen() {
   const minProfil = medlemmer.find((m) => m.id === bruker.id);
   const erAdmin = !!minProfil?.admin;
   const kanOppretteProsjekt = erAdmin || !!minProfil?.kanProsjekt;
-  const kanUtleie = erAdmin || !!minProfil?.kanUtleie;
+  const kanUtleie = erAdmin || !!minProfil?.kanUtleie || (utleie.ledere || []).includes(bruker.id);
   const serUtleie = kanUtleie || !!utleie.alleSerUtleie;
   const mineProsjekter = prosjekter.filter((p) => ledereAv(p).includes(bruker.id));
   const serRapport = erAdmin; // Logg og Rapport vises kun for admin
@@ -2579,7 +2581,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                 <span style={{ fontWeight: 600 }}>{m.navn}</span>
                 {m.admin && <span style={{ marginLeft: 8, fontSize: 11, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
                 {!m.admin && m.kanProsjekt && <span style={{ marginLeft: 8, fontSize: 11, background: C.sjogronn, color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>PROSJEKT</span>}
-                {!m.admin && m.kanUtleie && <span style={{ marginLeft: 8, fontSize: 11, background: "#7A5C3E", color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>UTLEIE</span>}
+                {!m.admin && (m.kanUtleie || (utleie.ledere || []).includes(m.id)) && <span style={{ marginLeft: 8, fontSize: 11, background: "#7A5C3E", color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>UTLEIE</span>}
                 {m.blokkert && <span style={{ marginLeft: 8, fontSize: 11, background: C.signal, color: "#fff", borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>BLOKKERT</span>}
                 <div style={{ fontSize: 12, color: C.dempet }}>
                   {tall(timerFor(m.id))} t · {m.epost || "ingen e-post"}
@@ -3075,6 +3077,35 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
                 setNyttObjektNavn("");
               }}>Legg til</button>
             </div>
+          </div>
+
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 16 }}>Utleieansvarlige</h3>
+            <p style={{ margin: "0 0 8px", fontSize: 13, color: C.dempet }}>
+              Velg én eller flere som skal kunne legge inn og endre utleie, i tillegg til admin.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+              {(utleie.ledere || []).length === 0 && <span style={{ fontSize: 13, color: C.dempet }}>Ingen valgt ennå — bare admin styrer utleie.</span>}
+              {(utleie.ledere || []).map((id) => {
+                const m = medlemmer.find((x) => x.id === id);
+                return (
+                  <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.kritt, border: `1px solid ${C.sand}`, borderRadius: 999, padding: "5px 11px", fontSize: 13.5, fontWeight: 600 }}>
+                    {m?.navn || "Ukjent"}
+                    <button onClick={() => onLagreUtleie({ ...utleie, ledere: (utleie.ledere || []).filter((x) => x !== id) })}
+                      aria-label="Fjern" style={{ background: "none", border: "none", color: C.signal, cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+                  </span>
+                );
+              })}
+            </div>
+            <select style={input} value="" onChange={(e) => {
+              if (!e.target.value) return;
+              onLagreUtleie({ ...utleie, ledere: [...(utleie.ledere || []), e.target.value] });
+            }}>
+              <option value="">+ Legg til utleieansvarlig …</option>
+              {[...medlemmer].filter((m) => !(utleie.ledere || []).includes(m.id)).sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                <option key={m.id} value={m.id}>{m.navn}</option>
+              ))}
+            </select>
           </div>
 
           <div>
