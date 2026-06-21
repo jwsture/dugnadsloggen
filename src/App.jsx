@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "2.5";
+const APP_VERSJON = "3.0";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -79,6 +79,7 @@ const fUtleiePeriode = (b) => {
 const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const gyldigEpost = (e) => /^\S+@\S+\.\S+$/.test(e.trim());
 const gyldigKode = (k) => /^\d{6}$/.test(k);
+const gyldigTelefon = (t) => /^[\d\s+]{8,15}$/.test(t.trim());
 const ledereAv = (p) => (Array.isArray(p.ledere) ? p.ledere : (p.lederId ? [p.lederId] : []));
 
 async function lesOgKomprimer(fil, maks = 900, kvalitet = 0.72) {
@@ -337,7 +338,8 @@ export default function Dugnadsloggen() {
         return;
       }
       const navn = session.user.user_metadata?.navn?.trim() || epost.split("@")[0];
-      const ny = { id: nyId(), navn, epost, pin: "", admin: naavaerende.length === 0 };
+      const telefon = session.user.user_metadata?.telefon?.trim() || "";
+      const ny = { id: nyId(), navn, epost, telefon, pin: "", admin: naavaerende.length === 0 };
       await lagreMeta([...naavaerende, ny]);
       setBruker({ id: ny.id, navn: ny.navn });
     })();
@@ -427,6 +429,7 @@ export default function Dugnadsloggen() {
             <Fane id="timer" tekst="Registrer" />
             <Fane id="kalender" tekst="Kalender" />
             <Fane id="prosjekter" tekst="Prosjekter" />
+            <Fane id="medlemmer" tekst="Medlemmer" />
             {erAdmin && <Fane id="logg" tekst="Logg" />}
             {serRapport && <Fane id="rapport" tekst="Rapport" />}
             {serUtleie && <Fane id="utleie" tekst="Utleie" />}
@@ -478,7 +481,7 @@ export default function Dugnadsloggen() {
 
         {fane === "kalender" && (
           <Kalender
-            dugnader={dugnader} medlemmer={medlemmer} prosjekter={prosjekter} bruker={bruker} erAdmin={erAdmin} aktiviteter={aktiviteter}
+            dugnader={dugnader} medlemmer={medlemmer} prosjekter={prosjekter} innslag={innslag} bruker={bruker} erAdmin={erAdmin} aktiviteter={aktiviteter}
             onLagre={lagreDugnader}
             onFoerTimer={async (nyeInnslag) => {
               await lagreInnslag([...nyeInnslag, ...innslag]);
@@ -526,6 +529,14 @@ export default function Dugnadsloggen() {
                 setFotoCache((f) => ({ ...f, [aktivt.id]: (f[aktivt.id] || []).filter((x) => x.nokkel !== nokkel) }));
               } catch (e) { setFeil("Kunne ikke slette bildet."); }
             }}
+            stil={stil}
+          />
+        )}
+
+        {fane === "medlemmer" && (
+          <MedlemsRegister
+            medlemmer={medlemmer} bruker={bruker}
+            onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
         )}
@@ -714,6 +725,187 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Hjem
 // ============================================================
+// ============================================================
+// Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
+// ============================================================
+function MedlemsRegister({ medlemmer, bruker, onLagreEgetTelefon, stil }) {
+  const { C, input, etikett, primKnapp, kort } = stil;
+  const [sok, setSok] = useState("");
+  const [redigerer, setRedigerer] = useState(false);
+  const [nyttTelefon, setNyttTelefon] = useState("");
+  const [feil, setFeil] = useState("");
+
+  const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
+  const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
+  const meg = medlemmer.find((m) => m.id === bruker.id);
+
+  return (
+    <section style={{ display: "grid", gap: 14 }}>
+      <div style={kort}>
+        <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Medlemsregister</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
+          Kontaktinfo til alle medlemmer i laget — kjekt hvis du vil ringe eller sende en melding.
+        </p>
+        <input style={input} value={sok} onChange={(e) => setSok(e.target.value)} placeholder="Søk etter navn …" />
+      </div>
+
+      <div style={kort}>
+        <h3 style={{ margin: "0 0 8px", fontFamily: "Georgia, serif", fontSize: 16 }}>Min kontaktinfo</h3>
+        {!redigerer ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ fontSize: 14 }}>
+              <div style={{ fontWeight: 600 }}>{meg?.navn}</div>
+              <div style={{ color: C.dempet }}>{meg?.epost || "ingen e-post"} · {meg?.telefon || "ingen telefon registrert"}</div>
+            </div>
+            <button style={{ background: "none", border: `1px solid ${C.sand}`, borderRadius: 6, padding: "6px 12px", fontSize: 13, cursor: "pointer", color: C.hav }}
+              onClick={() => { setNyttTelefon(meg?.telefon || ""); setRedigerer(true); setFeil(""); }}>
+              Endre telefonnummer
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {feil && <div style={{ background: "#FBEAE8", border: `1px solid ${C.signal}`, color: C.signal, padding: "8px 12px", borderRadius: 6, fontSize: 13 }}>{feil}</div>}
+            <div>
+              <label style={etikett}>Telefonnummer</label>
+              <input type="tel" style={input} value={nyttTelefon} onChange={(e) => setNyttTelefon(e.target.value)} placeholder="f.eks. 912 34 567" />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...primKnapp, padding: "8px 16px", fontSize: 14 }} onClick={async () => {
+                if (!gyldigTelefon(nyttTelefon)) { setFeil("Skriv inn et gyldig telefonnummer."); return; }
+                await onLagreEgetTelefon(nyttTelefon.trim());
+                setRedigerer(false);
+              }}>Lagre</button>
+              <button style={{ background: "none", border: `1px solid ${C.sand}`, borderRadius: 6, padding: "8px 16px", fontSize: 14, cursor: "pointer", color: C.dempet }}
+                onClick={() => setRedigerer(false)}>Avbryt</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gap: 8 }}>
+        {filtrert.length === 0 && <p style={{ color: C.dempet, textAlign: "center", padding: 18 }}>Ingen medlemmer funnet.</p>}
+        {filtrert.map((m) => (
+          <div key={m.id} style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                {m.navn}{m.id === bruker.id ? " (deg)" : ""}
+                {m.admin && <span style={{ marginLeft: 8, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
+              </div>
+              <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"}</div>
+            </div>
+            {m.telefon ? (
+              <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                📞 {m.telefon}
+              </a>
+            ) : (
+              <span style={{ fontSize: 13, color: C.dempet }}>Ingen telefon</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// "Legg til på hjem-skjermen" — veiledning tilpasset enheten
+// ============================================================
+function gjenkjennPlattform() {
+  if (typeof navigator === "undefined") return "ukjent";
+  const ua = navigator.userAgent || "";
+  const erIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const erStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+  if (erStandalone) return "installert";
+  if (erIOS) return "ios";
+  if (/Android/.test(ua)) return "android";
+  return "pc";
+}
+
+function LeggTilHjemskjerm({ stil }) {
+  const { C, kort } = stil;
+  const [plattform] = useState(gjenkjennPlattform);
+  const [apen, setApen] = useState(false);
+  const [skjult, setSkjult] = useState(() => {
+    try { return localStorage.getItem("akl-skjul-installtips") === "1"; }
+    catch (e) { return false; }
+  });
+
+  function skjul() {
+    setSkjult(true);
+    try { localStorage.setItem("akl-skjul-installtips", "1"); } catch (e) { /* uviktig */ }
+  }
+
+  if (plattform === "installert" || skjult) return null;
+
+  const STEG = {
+    ios: {
+      tittel: "Legg til på hjem-skjermen (iPhone/iPad)",
+      steg: [
+        "Trykk på Del-knappen nederst i Safari (firkant med pil opp).",
+        "Bla ned og trykk «Legg til på Hjem-skjerm».",
+        "Trykk «Legg til» øverst til høyre.",
+      ],
+      merk: "Må gjøres i Safari — fungerer ikke i Chrome eller andre apper på iPhone.",
+    },
+    android: {
+      tittel: "Legg til på hjem-skjermen (Android)",
+      steg: [
+        "Trykk på de tre prikkene oppe til høyre i nettleseren.",
+        "Velg «Legg til på startskjermen» (eller «Installer app»).",
+        "Bekreft ved å trykke «Legg til» / «Installer».",
+      ],
+      merk: "I Chrome dukker det noen ganger opp et eget «Installer»-forslag automatisk nederst.",
+    },
+    pc: {
+      tittel: "Legg til som app på PC-en",
+      steg: [
+        "Se etter et lite installer-ikon (skjerm med pil) i adressefeltet, helt til høyre.",
+        "Klikk på det og velg «Installer».",
+        "Appen åpnes nå i eget vindu, og legges til i startmenyen/dock.",
+      ],
+      merk: "Fungerer i Chrome og Edge. Ser du ikke ikonet, kan dette gjøres fra nettleserens meny i stedet.",
+    },
+    ukjent: {
+      tittel: "Legg til på hjem-skjermen",
+      steg: ["Se etter «Legg til på hjem-skjerm» eller «Installer app» i nettleserens meny."],
+      merk: "",
+    },
+  };
+  const info = STEG[plattform] || STEG.ukjent;
+
+  return (
+    <div style={{ ...kort, borderLeft: `4px solid ${C.sjogronn}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 22 }}>📲</span>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14.5 }}>Legg appen på hjem-skjermen</div>
+            <div style={{ fontSize: 12.5, color: C.dempet }}>Da åpnes den som en vanlig app, uten adressefelt.</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setApen(!apen)}
+            style={{ background: C.sjogronn, color: "#fff", border: "none", borderRadius: 6, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+            {apen ? "Lukk" : "Vis meg hvordan"}
+          </button>
+          <button onClick={skjul} aria-label="Skjul"
+            style={{ background: "none", border: "none", color: C.dempet, fontSize: 18, cursor: "pointer", padding: "0 4px" }}>×</button>
+        </div>
+      </div>
+      {apen && (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.sand}` }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>{info.tittel}</div>
+          <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, lineHeight: 1.7 }}>
+            {info.steg.map((s, i) => <li key={i}>{s}</li>)}
+          </ol>
+          {info.merk && <p style={{ margin: "8px 0 0", fontSize: 12.5, color: C.dempet }}>{info.merk}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Hjem({ bruker, medlemmer, prosjekter, innslag, dugnader, logo, erAdmin, sisteBackup, gaaTil, stil }) {
   const { C, kort } = stil;
   const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
@@ -757,6 +949,8 @@ function Hjem({ bruker, medlemmer, prosjekter, innslag, dugnader, logo, erAdmin,
           </div>
         </div>
       </div>
+
+      <LeggTilHjemskjerm stil={stil} />
 
       {backupPaaminnelse && (
         <div style={{ ...kort, borderLeft: `4px solid ${C.signal}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -837,6 +1031,7 @@ function Innlogging({ logo, stil }) {
   const [modus, setModus] = useState("inn"); // inn | ny | glemt
   const [navn, setNavn] = useState("");
   const [epost, setEpost] = useState("");
+  const [telefon, setTelefon] = useState("");
   const [passord, setPassord] = useState("");
   const [feil, setFeil] = useState("");
   const [info, setInfo] = useState("");
@@ -855,15 +1050,22 @@ function Innlogging({ logo, stil }) {
     setFeil(""); setInfo("");
     if (navn.trim().length < 2) { setFeil("Skriv inn fullt navn."); return; }
     if (!/^\S+@\S+\.\S+$/.test(epost)) { setFeil("Skriv inn en gyldig e-postadresse."); return; }
-    if (passord.length < 6) { setFeil("Passordet må ha minst 6 tegn."); return; }
+    if (!gyldigTelefon(telefon)) { setFeil("Skriv inn et gyldig telefonnummer (minst 8 siffer)."); return; }
+    if (!passord) { setFeil("Velg et passord."); return; }
     setJobber(true);
     const { error } = await supabase.auth.signUp({
       email: epost.trim().toLowerCase(),
       password: passord,
-      options: { data: { navn: navn.trim() } },
+      options: { data: { navn: navn.trim(), telefon: telefon.trim() } },
     });
     setJobber(false);
-    if (error) { setFeil(error.message.includes("registered") ? "E-posten er allerede registrert. Logg inn i stedet." : "Kunne ikke registrere. Prøv igjen."); return; }
+    if (error) {
+      let melding = "Kunne ikke registrere. Prøv igjen.";
+      if (error.message.includes("registered")) melding = "E-posten er allerede registrert. Logg inn i stedet.";
+      else if (error.message.toLowerCase().includes("password") || error.message.toLowerCase().includes("passord")) melding = "Passordet er for kort for systemet vårt — prøv noen tegn til.";
+      setFeil(melding);
+      return;
+    }
     setInfo("Konto opprettet! Hvis e-postbekreftelse er på, sjekk innboksen din. Ellers kan du logge inn nå.");
     setModus("inn");
   }
@@ -924,8 +1126,18 @@ function Innlogging({ logo, stil }) {
                 <input type="email" value={epost} onChange={(e) => setEpost(e.target.value)} style={input} placeholder="din@epost.no" />
               </div>
               <div>
+                <label style={etikett}>Telefonnummer</label>
+                <input type="tel" value={telefon} onChange={(e) => setTelefon(e.target.value)} style={input} placeholder="f.eks. 912 34 567" />
+                <p style={{ margin: "5px 0 0", fontSize: 12, color: C.dempet }}>Vises i medlemslisten, så andre kan ta kontakt.</p>
+              </div>
+              <div>
                 <label style={etikett}>Velg passord</label>
-                <input type="password" value={passord} onChange={(e) => setPassord(e.target.value)} style={input} placeholder="Minst 6 tegn" />
+                <input type="password" value={passord} onChange={(e) => setPassord(e.target.value)} style={input} placeholder="Du bestemmer selv" />
+                <p style={{ margin: "5px 0 0", fontSize: 12, color: C.dempet, lineHeight: 1.5 }}>
+                  Du velger fritt — men jo lengre, jo tryggere. Unngå rene gjentakelser som «123456». Et godt knep er en kort
+                  setning bare du vet, f.eks. samme type som koden til Kystbua eller passordet ditt i StyreWeb — noe som
+                  «Kystbua-1987!» eller «GrågåsRundtKlokka07».
+                </p>
               </div>
               <button style={{ ...primKnapp, width: "100%", opacity: jobber ? 0.6 : 1 }} disabled={jobber} onClick={registrer}>{jobber ? "Oppretter …" : "Registrer og logg inn"}</button>
               <button onClick={() => { setModus("inn"); setFeil(""); setInfo(""); }} style={lenke}>Tilbake til innlogging</button>
@@ -958,7 +1170,7 @@ function Innlogging({ logo, stil }) {
 // ============================================================
 // Kalender
 // ============================================================
-function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktiviteter, onLagre, onFoerTimer, stil }) {
+function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, aktiviteter, onLagre, onFoerTimer, stil }) {
   const { C, input, etikett, primKnapp, sekKnapp, kort } = stil;
   const [viserSkjema, setViserSkjema] = useState(false);
   const [tittel, setTittel] = useState("");
@@ -974,25 +1186,116 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
   const [bulkAktivitet, setBulkAktivitet] = useState(aktiviteter[0] || "Annet");
   const [leggTilId, setLeggTilId] = useState("");
   const [viserTidligere, setViserTidligere] = useState(false);
+  const [redigerId, setRedigerId] = useState(null);
+  const [visUtforte, setVisUtforte] = useState(false);
+  const [varselApent, setVarselApent] = useState(null); // dugnad-id som varselpanelet er åpent for
+  const [varselMottakere, setVarselMottakere] = useState("alle"); // "alle" | "prosjekt"
+  const [nettopOpprettetVarsel, setNettopOpprettetVarsel] = useState(null); // dugnad rett etter opprettelse
 
   const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
   const idag = iDag();
-  const kommende = dugnader.filter((d) => d.dato >= idag).sort((a, b) => a.dato.localeCompare(b.dato));
-  const tidligere = dugnader.filter((d) => d.dato < idag).sort((a, b) => b.dato.localeCompare(a.dato));
+  const planlagteAlle = dugnader.filter((d) => d.status !== "utfort");
+  const utforteAlle = dugnader.filter((d) => d.status === "utfort");
+  const kommende = planlagteAlle.filter((d) => d.dato >= idag).sort((a, b) => a.dato.localeCompare(b.dato));
+  const tidligere = planlagteAlle.filter((d) => d.dato < idag).sort((a, b) => b.dato.localeCompare(a.dato));
+  const utforte = [...utforteAlle].sort((a, b) => b.dato.localeCompare(a.dato));
+
+  // Medlemmer "tilknyttet" et prosjekt: de som har ført timer på det, pluss prosjektansvarlige
+  function medlemmerForProsjekt(prosjektId) {
+    if (!prosjektId) return [];
+    const p = prosjekter.find((x) => x.id === prosjektId);
+    const fraTimer = innslag.filter((i) => i.prosjektId === prosjektId).map((i) => i.medlemId);
+    const ansvarlige = p ? ledereAv(p) : [];
+    return [...new Set([...fraTimer, ...ansvarlige])];
+  }
+
+  function epostMottakere(d, omfang) {
+    const ider = omfang === "prosjekt" && d.prosjektId
+      ? medlemmerForProsjekt(d.prosjektId)
+      : medlemmer.map((m) => m.id);
+    return medlemmer.filter((m) => ider.includes(m.id) && m.epost);
+  }
+
+  function dugnadVarselTekst(d) {
+    const linjer = [
+      `Hei!`,
+      ``,
+      `Det er planlagt dugnad: ${d.tittel}`,
+      `Dato: ${fDato(d.dato)}${fTid(d)}`,
+      d.sted ? `Sted: ${d.sted}` : null,
+      d.beskrivelse ? `` : null,
+      d.beskrivelse || null,
+      ``,
+      `Meld deg på i Dugnadsloggen.`,
+      ``,
+      `Hilsen ${bruker.navn}, Askøy Kystlag`,
+    ].filter((x) => x !== null);
+    return linjer.join("\n");
+  }
+
+  function sendEpostVarsel(d, omfang) {
+    const mottakere = epostMottakere(d, omfang);
+    if (mottakere.length === 0) {
+      window.alert("Fant ingen mottakere med registrert e-postadresse for dette utvalget.");
+      return;
+    }
+    const bcc = mottakere.map((m) => m.epost).join(",");
+    const emne = encodeURIComponent(`Dugnad: ${d.tittel} — ${fDato(d.dato)}`);
+    const kropp = encodeURIComponent(dugnadVarselTekst(d));
+    const a = document.createElement("a");
+    a.href = `mailto:?bcc=${bcc}&subject=${emne}&body=${kropp}`;
+    a.click();
+  }
+
+  function tomSkjema() {
+    setTittel(""); setDato(""); setTid(""); setTidSlutt(""); setSted(""); setBeskrivelse(""); setProsjektId("");
+    setRedigerId(null); setViserSkjema(false); setFeil("");
+  }
+
+  function startRedigering(d) {
+    setRedigerId(d.id);
+    setTittel(d.tittel); setDato(d.dato); setTid(d.tid || ""); setTidSlutt(d.tidSlutt || "");
+    setSted(d.sted || ""); setBeskrivelse(d.beskrivelse || ""); setProsjektId(d.prosjektId || "");
+    setFeil(""); setViserSkjema(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function slettDugnad(d) {
+    if (!(await bekreft(`Slette dugnaden «${d.tittel}»? Dette kan ikke angres.`))) return;
+    await onLagre(dugnader.filter((x) => x.id !== d.id));
+  }
+
+  async function settUtfort(d, utfort) {
+    await onLagre(dugnader.map((x) => (x.id === d.id ? { ...x, status: utfort ? "utfort" : "planlagt" } : x)));
+  }
 
   async function opprett() {
     setFeil("");
     if (tittel.trim().length < 2) { setFeil("Gi dugnaden et navn."); return; }
     if (!dato) { setFeil("Velg dato for dugnaden."); return; }
     if (tidSlutt && tid && tidSlutt <= tid) { setFeil("Sluttiden må være etter starttiden."); return; }
+
+    if (redigerId) {
+      const original = dugnader.find((x) => x.id === redigerId);
+      if (!original) { tomSkjema(); return; }
+      const oppdatert = {
+        ...original,
+        tittel: tittel.trim(), dato, tid: tid.trim(), tidSlutt: tidSlutt.trim(), sted: sted.trim(),
+        beskrivelse: beskrivelse.trim(), prosjektId: prosjektId || null,
+      };
+      await onLagre(dugnader.map((x) => (x.id === redigerId ? oppdatert : x)));
+      tomSkjema();
+      return;
+    }
+
     const d = {
       id: nyId(), tittel: tittel.trim(), dato, tid: tid.trim(), tidSlutt: tidSlutt.trim(), sted: sted.trim(),
-      beskrivelse: beskrivelse.trim(), prosjektId: prosjektId || null,
+      beskrivelse: beskrivelse.trim(), prosjektId: prosjektId || null, status: "planlagt",
       ansvarligId: bruker.id, paameldte: [bruker.id], oppmoette: [],
     };
     await onLagre([...dugnader, d]);
-    setTittel(""); setDato(""); setTid(""); setTidSlutt(""); setSted(""); setBeskrivelse(""); setProsjektId("");
-    setViserSkjema(false);
+    setNettopOpprettetVarsel(d);
+    tomSkjema();
   }
 
   async function togglePaamelding(d) {
@@ -1021,6 +1324,7 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 17, fontFamily: "Georgia, serif" }}>
               {d.tittel}
+              {d.status === "utfort" && <span style={{ marginLeft: 8, fontSize: 10.5, fontFamily: "'Helvetica Neue', Arial, sans-serif", background: "#4E7E5B", color: "#fff", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.06em", verticalAlign: "middle" }}>UTFØRT</span>}
               {d.utleie && <span style={{ marginLeft: 8, fontSize: 10.5, fontFamily: "'Helvetica Neue', Arial, sans-serif", background: C.signal, color: "#fff", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.06em", verticalAlign: "middle" }}>UTLEIEOPPDRAG</span>}
             </div>
             <div style={{ fontSize: 13, color: C.dempet, marginTop: 3 }}>
@@ -1054,10 +1358,40 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
 
         {kanStyre && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.sand}`, paddingTop: 12 }}>
-            <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13 }}
-              onClick={() => { setAapenOppmoete(viserOppmoete ? null : d.id); setLeggTilId(""); setBulkTimer(""); }}>
-              {viserOppmoete ? "Lukk oppmøteregistrering" : "Registrer oppmøte"}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13 }}
+                onClick={() => { setAapenOppmoete(viserOppmoete ? null : d.id); setLeggTilId(""); setBulkTimer(""); }}>
+                {viserOppmoete ? "Lukk oppmøteregistrering" : "Registrer oppmøte"}
+              </button>
+              <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13 }}
+                onClick={() => setVarselApent(varselApent === d.id ? null : d.id)}>
+                📧 {varselApent === d.id ? "Lukk varsel" : "Send varsel"}
+              </button>
+              <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13 }} onClick={() => startRedigering(d)}>
+                ✏️ Endre
+              </button>
+              <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13, borderColor: "#4E7E5B", color: "#2F5A3C" }}
+                onClick={() => settUtfort(d, d.status !== "utfort")}>
+                {d.status === "utfort" ? "↩ Sett som planlagt" : "✓ Marker utført"}
+              </button>
+              <button style={{ ...sekKnapp, padding: "7px 12px", fontSize: 13, borderColor: C.signal, color: C.signal }}
+                onClick={() => slettDugnad(d)}>
+                🗑 Slett
+              </button>
+            </div>
+
+            {varselApent === d.id && (
+              <div style={{ marginTop: 12, display: "grid", gap: 8, background: C.kritt, borderRadius: 8, padding: 12 }}>
+                <select style={input} value={varselMottakere} onChange={(e) => setVarselMottakere(e.target.value)}>
+                  <option value="alle">Alle medlemmer</option>
+                  {d.prosjektId && <option value="prosjekt">Bare medlemmer tilknyttet prosjektet</option>}
+                </select>
+                <button style={{ ...primKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => { sendEpostVarsel(d, varselMottakere); setVarselApent(null); }}>
+                  📧 Send varsel på e-post
+                </button>
+                <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Åpner e-postappen din med mottakerne ferdig fylt inn (skjult for hverandre).</p>
+              </div>
+            )}
 
             {viserOppmoete && (
               <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
@@ -1119,9 +1453,10 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
       {feil && <div style={{ background: "#FBEAE8", border: `1px solid ${C.signal}`, color: C.signal, padding: "9px 12px", borderRadius: 6, fontSize: 14 }}>{feil}</div>}
 
       {!viserSkjema ? (
-        <button style={{ ...primKnapp, width: "100%" }} onClick={() => setViserSkjema(true)}>+ Planlegg ny dugnad</button>
+        <button style={{ ...primKnapp, width: "100%" }} onClick={() => { tomSkjema(); setViserSkjema(true); }}>+ Planlegg ny dugnad</button>
       ) : (
         <div style={{ ...kort, display: "grid", gap: 12 }}>
+          {redigerId && <div style={{ fontWeight: 700, fontFamily: "Georgia, serif", fontSize: 16 }}>Endre dugnad</div>}
           <div>
             <label style={etikett}>Hva skal gjøres?</label>
             <input style={input} value={tittel} onChange={(e) => setTittel(e.target.value)} placeholder="f.eks. Vårpuss på Oselvaren" />
@@ -1156,10 +1491,29 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
             <textarea style={{ ...input, minHeight: 60, resize: "vertical" }} value={beskrivelse} onChange={(e) => setBeskrivelse(e.target.value)} placeholder="Ta med arbeidsklær, vi stiller med kaffe …" />
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button style={{ ...primKnapp, flex: 1 }} onClick={opprett}>Opprett dugnad</button>
-            <button style={{ background: "none", border: `1px solid ${C.sand}`, borderRadius: 6, padding: "10px 16px", cursor: "pointer", color: C.dempet }} onClick={() => setViserSkjema(false)}>Avbryt</button>
+            <button style={{ ...primKnapp, flex: 1 }} onClick={opprett}>{redigerId ? "Lagre endringer" : "Opprett dugnad"}</button>
+            <button style={{ background: "none", border: `1px solid ${C.sand}`, borderRadius: 6, padding: "10px 16px", cursor: "pointer", color: C.dempet }} onClick={tomSkjema}>Avbryt</button>
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Du blir automatisk dugnadsansvarlig og påmeldt.</p>
+          {!redigerId && <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Du blir automatisk dugnadsansvarlig og påmeldt.</p>}
+        </div>
+      )}
+
+      {nettopOpprettetVarsel && (
+        <div style={{ ...kort, borderLeft: `4px solid ${C.sjogronn}`, display: "grid", gap: 10 }}>
+          <div style={{ fontWeight: 700 }}>✓ Dugnaden «{nettopOpprettetVarsel.tittel}» er opprettet — vil du varsle noen?</div>
+          <select style={input} value={varselMottakere} onChange={(e) => setVarselMottakere(e.target.value)}>
+            <option value="alle">Alle medlemmer</option>
+            {nettopOpprettetVarsel.prosjektId && <option value="prosjekt">Bare medlemmer tilknyttet prosjektet</option>}
+          </select>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={{ ...primKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => { sendEpostVarsel(nettopOpprettetVarsel, varselMottakere); setNettopOpprettetVarsel(null); }}>
+              📧 Send varsel på e-post
+            </button>
+            <button style={{ ...sekKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => setNettopOpprettetVarsel(null)}>
+              Hopp over
+            </button>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Åpner e-postappen din med mottakerne ferdig fylt inn (skjult for hverandre).</p>
         </div>
       )}
 
@@ -1175,6 +1529,16 @@ function Kalender({ dugnader, medlemmer, prosjekter, bruker, erAdmin, aktivitete
             {viserTidligere ? "Skjul tidligere dugnader" : `Vis tidligere dugnader (${tidligere.length})`}
           </button>
           {viserTidligere && tidligere.map((d) => <DugnadKort key={d.id} d={d} erTidligere={true} />)}
+        </>
+      )}
+
+      {utforte.length > 0 && (
+        <>
+          <button onClick={() => setVisUtforte(!visUtforte)}
+            style={{ background: "none", border: "none", color: C.hav, cursor: "pointer", fontSize: 14, textDecoration: "underline", padding: 6 }}>
+            {visUtforte ? "Skjul utførte dugnader" : `✓ Vis utførte dugnader (${utforte.length})`}
+          </button>
+          {visUtforte && utforte.map((d) => <DugnadKort key={d.id} d={d} erTidligere={d.dato < idag} />)}
         </>
       )}
     </section>
@@ -2393,6 +2757,17 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
     onLagreMeta(medlemmer.map((x) => (x.id === m.id ? { ...x, epost: trimmet } : x)));
   }
 
+  async function endreTelefon(m) {
+    const ny = await sporsmaal(`Telefonnummer for ${m.navn}:`, m.telefon || "");
+    if (ny === null) return;
+    const trimmet = ny.trim();
+    if (trimmet && !gyldigTelefon(trimmet)) {
+      await varsle("Det ser ikke ut som et gyldig telefonnummer.");
+      return;
+    }
+    onLagreMeta(medlemmer.map((x) => (x.id === m.id ? { ...x, telefon: trimmet } : x)));
+  }
+
   return (
     <section style={{ display: "grid", gap: 14 }}>
       {/* Versjon — gjør det enkelt å se om en oppdatering har slått gjennom */}
@@ -2609,6 +2984,9 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                 <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }} onClick={() => endreEpost(m)}>
                   E-post
                 </button>
+                <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }} onClick={() => endreTelefon(m)}>
+                  Telefon
+                </button>
                 <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }}
                   onClick={async () => {
                     if (!m.epost) { await varsle("Medlemmet mangler e-postadresse."); return; }
@@ -2811,6 +3189,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
       paameldte: [],
       oppmoette: [],
       utleie: true,
+      status: "planlagt",
     };
   }
 

@@ -2,8 +2,21 @@
 <html lang="nb">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Dugnadsloggen — Askøy Kystlag</title>
+
+    <!-- Gjør appen "installerbar" på hjem-skjermen (Android/Chrome) -->
+    <link rel="manifest" href="/dugnadsloggen/manifest.json" />
+    <meta name="theme-color" content="#1B3A4B" />
+
+    <!-- iPhone/iPad: åpne i fullskjerm uten Safari-adresselinje når lagt til hjem-skjermen -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Dugnadsloggen" />
+    <link rel="apple-touch-icon" href="/dugnadsloggen/icons/apple-touch-icon.png" />
+
+    <!-- Vanlig favicon -->
+    <link rel="icon" type="image/png" href="/dugnadsloggen/icons/icon-192.png" />
   </head>
   <body>
     <div id="root"></div>
