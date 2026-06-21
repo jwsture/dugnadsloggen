@@ -1,0 +1,32 @@
+{
+  "name": "Dugnadsloggen — Askøy Kystlag",
+  "short_name": "Dugnadsloggen",
+  "description": "Registrer dugnadstimer, prosjekter, kalender og utleie for Askøy Kystlag.",
+  "start_url": "/dugnadsloggen/",
+  "scope": "/dugnadsloggen/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F7F5F0",
+  "theme_color": "#1B3A4B",
+  "lang": "nb",
+  "icons": [
+    {
+      "src": "/dugnadsloggen/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/dugnadsloggen/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/dugnadsloggen/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
