@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.3";
+const APP_VERSJON = "3.4";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -591,6 +591,8 @@ export default function Dugnadsloggen() {
         {fane === "medlemmer" && (
           <MedlemsRegister
             medlemmer={medlemmer} bruker={bruker} grupper={grupper} prosjekter={prosjekter} innslag={innslag}
+            erAdmin={erAdmin}
+            onLagreGrupper={lagreGrupper}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
@@ -789,7 +791,7 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, onLagreEgetTelefon, stil }) {
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAdmin, onLagreGrupper, onLagreEgetTelefon, stil }) {
   const { C, input, etikett, primKnapp, kort, sekKnapp } = stil;
   const [sok, setSok] = useState("");
   const [redigerer, setRedigerer] = useState(false);
@@ -797,6 +799,9 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, onLa
   const [feil, setFeil] = useState("");
   const [valgte, setValgte] = useState(new Set());
   const [smsModus, setSmsModus] = useState(false);
+  const [visGrupper, setVisGrupper] = useState(false);
+  const [nyGruppeNavn, setNyGruppeNavn] = useState("");
+  const [apenGruppe, setApenGruppe] = useState(null);
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
@@ -894,6 +899,69 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, onLa
             <p style={{ margin: 0, fontSize: 13, color: C.signal }}>
               Ingen medlemmer har registrert telefonnummer ennå.
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Gruppeadministrasjon — kun for admin */}
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>Grupper</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>For rask SMS-utsendelse til et utvalg. Prosjektgrupper lages automatisk.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisGrupper(!visGrupper)}>
+              {visGrupper ? "Lukk" : "Administrer grupper"}
+            </button>
+          </div>
+          {visGrupper && (
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              {(grupper || []).length === 0 && <p style={{ fontSize: 13, color: C.dempet, margin: 0 }}>Ingen egne grupper ennå.</p>}
+              {(grupper || []).map((g) => (
+                <div key={g.id} style={{ background: C.kritt, borderRadius: 8, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600 }}>{g.navn} <span style={{ fontSize: 12, color: C.dempet, fontWeight: 400 }}>({g.medlemmer.length} valgt)</span></span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => setApenGruppe(apenGruppe === g.id ? null : g.id)}>
+                        {apenGruppe === g.id ? "Lukk" : "Velg medlemmer"}
+                      </button>
+                      <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
+                        onClick={async () => {
+                          if (!(await stil.bekreft(`Slette gruppen «${g.navn}»?`))) return;
+                          onLagreGrupper((grupper || []).filter((x) => x.id !== g.id));
+                        }}>Slett</button>
+                    </div>
+                  </div>
+                  {apenGruppe === g.id && (
+                    <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                        <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer",
+                          background: g.medlemmer.includes(m.id) ? C.hav : "#fff",
+                          color: g.medlemmer.includes(m.id) ? C.kritt : C.tjaere,
+                          borderRadius: 999, padding: "5px 12px", border: `1px solid ${g.medlemmer.includes(m.id) ? C.hav : C.sand}` }}>
+                          <input type="checkbox" checked={g.medlemmer.includes(m.id)} style={{ display: "none" }}
+                            onChange={() => {
+                              const ny = g.medlemmer.includes(m.id) ? g.medlemmer.filter((x) => x !== m.id) : [...g.medlemmer, m.id];
+                              onLagreGrupper((grupper || []).map((x) => (x.id === g.id ? { ...x, medlemmer: ny } : x)));
+                            }} />
+                          {m.navn}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <input style={{ ...input, flex: 1 }} value={nyGruppeNavn} onChange={(e) => setNyGruppeNavn(e.target.value)} placeholder="f.eks. Styret, Båtmannskap …" onKeyDown={(e) => e.key === "Enter" && nyGruppeNavn.trim().length >= 2 && (onLagreGrupper([...(grupper || []), { id: nyId(), navn: nyGruppeNavn.trim(), medlemmer: [] }]), setNyGruppeNavn(""))} />
+                <button style={{ ...sekKnapp, padding: "8px 14px" }} onClick={() => {
+                  const n = nyGruppeNavn.trim();
+                  if (n.length < 2) return;
+                  onLagreGrupper([...(grupper || []), { id: nyId(), navn: n, medlemmer: [] }]);
+                  setNyGruppeNavn("");
+                }}>+ Ny gruppe</button>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -2769,9 +2837,6 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
   const [nyttMedlemTelefon, setNyttMedlemTelefon] = useState("");
   const [nyttMedlemFeil, setNyttMedlemFeil] = useState("");
   const [viserNyttMedlem, setViserNyttMedlem] = useState(false);
-  // Grupper
-  const [nyGruppeNavn, setNyGruppeNavn] = useState("");
-  const [apenGruppe, setApenGruppe] = useState(null); // gruppe-id for å redigere
   const [autoBackuper, setAutoBackuper] = useState(null);
   const [henterAutoBackuper, setHenterAutoBackuper] = useState(false);
   const timerFor = (mid) => innslag.filter((i) => i.medlemId === mid).reduce((s, i) => s + i.timer, 0);
@@ -3275,57 +3340,6 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
             </button>
           </div>
         ))}
-      </div>
-
-      {/* Grupper */}
-      <div style={kort}>
-        <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Grupper</h2>
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
-          Lag egne grupper for SMS-utsendelse — f.eks. «Styret» eller «Båtmannskap». Grupper fra prosjekter lages automatisk.
-        </p>
-        {(grupper || []).map((g) => (
-          <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 600 }}>{g.navn} <span style={{ fontSize: 12, color: C.dempet }}>({g.medlemmer.length} med telefon)</span></div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => setApenGruppe(apenGruppe === g.id ? null : g.id)}>
-                  {apenGruppe === g.id ? "Lukk" : "Endre"}
-                </button>
-                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }} onClick={async () => {
-                  if (!(await bekreft(`Slette gruppen «${g.navn}»?`))) return;
-                  onLagreGrupper((grupper || []).filter((x) => x.id !== g.id));
-                }}>Slett</button>
-              </div>
-            </div>
-            {apenGruppe === g.id && (
-              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
-                  <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer",
-                    background: g.medlemmer.includes(m.id) ? C.hav : C.kritt,
-                    color: g.medlemmer.includes(m.id) ? C.kritt : C.tjaere,
-                    borderRadius: 999, padding: "4px 10px", border: `1px solid ${C.sand}` }}>
-                    <input type="checkbox" checked={g.medlemmer.includes(m.id)} style={{ display: "none" }}
-                      onChange={() => {
-                        const ny = g.medlemmer.includes(m.id) ? g.medlemmer.filter((x) => x !== m.id) : [...g.medlemmer, m.id];
-                        onLagreGrupper((grupper || []).map((x) => (x.id === g.id ? { ...x, medlemmer: ny } : x)));
-                      }} />
-                    {m.navn}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-        {(grupper || []).length === 0 && <p style={{ fontSize: 13, color: C.dempet, margin: "0 0 10px" }}>Ingen grupper ennå.</p>}
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input style={{ ...input, flex: 1 }} value={nyGruppeNavn} onChange={(e) => setNyGruppeNavn(e.target.value)} placeholder="f.eks. Styret, Båtmannskap …" />
-          <button style={{ ...sekKnapp, padding: "8px 14px" }} onClick={() => {
-            const n = nyGruppeNavn.trim();
-            if (n.length < 2) return;
-            onLagreGrupper([...(grupper || []), { id: nyId(), navn: n, medlemmer: [] }]);
-            setNyGruppeNavn("");
-          }}>Opprett gruppe</button>
-        </div>
       </div>
 
       {/* Prosjekter */}
