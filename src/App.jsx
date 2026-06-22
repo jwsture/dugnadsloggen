@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.0";
+const APP_VERSJON = "3.3";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -42,6 +42,7 @@ const K_LOGO = "akl-logo";
 const K_UTLEIE = "akl-utleie";
 const K_BACKUPINFO = "akl-backupinfo";
 const K_GAMMEL = "askoy-kystlag-dugnad";
+const K_GRUPPER = "akl-grupper";
 const UTLEIE_STANDARD = {
   objekter: [
     { id: "lokale-a", navn: "Lokale 1", type: "lokale" },
@@ -114,6 +115,37 @@ function lastNedCSV(rader, filnavn) {
 }
 
 // Lagets merke (placeholder til egen logo lastes opp i Admin)
+// ============================================================
+// Tidsvelger: kun hele timer + kvarter (00, 15, 30, 45) — for konsistens
+// overalt hvor klokkeslett velges (dugnader, utleie m.m.)
+// ============================================================
+function TidVelger({ value, onChange, style }) {
+  const [time, minutt] = value ? value.split(":") : ["", ""];
+  const timer = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutter = ["00", "15", "30", "45"];
+
+  function settTime(nyTime) {
+    onChange(`${nyTime}:${minutt || "00"}`);
+  }
+  function settMinutt(nyttMinutt) {
+    onChange(`${time || "00"}:${nyttMinutt}`);
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <select style={{ ...style, flex: 1 }} value={time} onChange={(e) => settTime(e.target.value)}>
+        <option value="">Time</option>
+        {timer.map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+      <span style={{ fontWeight: 700, color: "#6B7A80" }}>:</span>
+      <select style={{ ...style, flex: 1 }} value={minutt} onChange={(e) => settMinutt(e.target.value)}>
+        <option value="">Min</option>
+        {minutter.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function Lagsmerke({ size = 64, lys = false }) {
   const farge = lys ? "#F7F5F0" : C.hav;
   return (
@@ -140,6 +172,7 @@ export default function Dugnadsloggen() {
   const [utleie, setUtleie] = useState(UTLEIE_STANDARD);
   const [logo, setLogo] = useState(null);
   const [sisteBackup, setSisteBackup] = useState(null);
+  const [grupper, setGrupper] = useState([]);
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
@@ -223,6 +256,10 @@ export default function Dugnadsloggen() {
         }
       } catch (e) { /* ingen utleiedata ennå */ }
       try {
+        const r = await window.storage.get(K_GRUPPER, true);
+        if (r?.value) setGrupper(JSON.parse(r.value));
+      } catch (e) { /* ingen grupper ennå */ }
+      try {
         const r = await window.storage.get(K_BACKUPINFO, true);
         if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
       } catch (e) { /* ingen backup tatt ennå */ }
@@ -272,6 +309,7 @@ export default function Dugnadsloggen() {
   const lagreProsjekter = lagre(K_PROSJEKT, setProsjekter, "Kunne ikke lagre prosjektet.");
   const lagreInnslag = lagre(K_INNSLAG, setInnslag, "Kunne ikke lagre timene.");
   const lagreDugnader = lagre(K_DUGNAD, setDugnader, "Kunne ikke lagre dugnaden.");
+  const lagreGrupper = lagre(K_GRUPPER, setGrupper, "Kunne ikke lagre grupper.");
   const lagreAktiviteter = lagre(K_AKT, setAktiviteter, "Kunne ikke lagre aktivitetslisten.");
   const lagreUtleie = lagre(K_UTLEIE, setUtleie, "Kunne ikke lagre utleiedataene.");
 
@@ -309,12 +347,22 @@ export default function Dugnadsloggen() {
   useEffect(() => {
     if (laster || !session?.user?.email || bruker) return;
     const epost = session.user.email.toLowerCase();
-    const funnet = medlemmer.find((m) => (m.epost || "").toLowerCase() === epost);
+    const telefon = (session.user.user_metadata?.telefon || "").replace(/\s+/g, "");
+
+    // Match på e-post ELLER telefonnummer (telefon er nytt – støtter admin-opprettede profiler)
+    const funnet = medlemmer.find((m) =>
+      (m.epost || "").toLowerCase() === epost ||
+      (telefon && m.telefon && m.telefon.replace(/\s+/g, "") === telefon)
+    );
     if (funnet) {
       if (funnet.blokkert) {
         supabase.auth.signOut();
         setFeil("Denne brukeren er blokkert av en administrator. Ta kontakt med laget hvis du tror dette er en feil.");
         return;
+      }
+      // Oppdater e-post på profilen hvis den var opprettet av admin uten e-post
+      if (!funnet.epost && epost) {
+        lagreMeta(medlemmer.map((m) => (m.id === funnet.id ? { ...m, epost } : m)));
       }
       setBruker({ id: funnet.id, navn: funnet.navn });
       return;
@@ -326,13 +374,20 @@ export default function Dugnadsloggen() {
         const r = await window.storage.get(K_META, true);
         if (r?.value) naavaerende = JSON.parse(r.value).medlemmer || medlemmer;
       } catch (e) { /* bruk det vi allerede har */ }
-      const finnesAllerede = naavaerende.find((m) => (m.epost || "").toLowerCase() === epost);
+      const finnesAllerede = naavaerende.find((m) =>
+        (m.epost || "").toLowerCase() === epost ||
+        (telefon && m.telefon && m.telefon.replace(/\s+/g, "") === telefon)
+      );
       if (finnesAllerede) {
         setMedlemmer(naavaerende);
         if (finnesAllerede.blokkert) {
           supabase.auth.signOut();
           setFeil("Denne brukeren er blokkert av en administrator. Ta kontakt med laget hvis du tror dette er en feil.");
           return;
+        }
+        // Oppdater e-post på admin-opprettet profil
+        if (!finnesAllerede.epost && epost) {
+          await lagreMeta(naavaerende.map((m) => (m.id === finnesAllerede.id ? { ...m, epost } : m)));
         }
         setBruker({ id: finnesAllerede.id, navn: finnesAllerede.navn });
         return;
@@ -535,7 +590,7 @@ export default function Dugnadsloggen() {
 
         {fane === "medlemmer" && (
           <MedlemsRegister
-            medlemmer={medlemmer} bruker={bruker}
+            medlemmer={medlemmer} bruker={bruker} grupper={grupper} prosjekter={prosjekter} innslag={innslag}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
@@ -604,6 +659,12 @@ export default function Dugnadsloggen() {
         {fane === "admin" && erAdmin && (
           <Admin
             medlemmer={medlemmer} prosjekter={prosjekter} innslag={innslag} dugnader={dugnader} aktiviteter={aktiviteter} utleie={utleie} bruker={bruker} logo={logo}
+            grupper={grupper}
+            onLagreGrupper={lagreGrupper}
+            onLeggTilMedlem={async (nytt) => {
+              await lagreMeta([...medlemmer, nytt]);
+              setInfo(`${nytt.navn} er lagt til som medlem.`);
+            }}
             sisteBackup={sisteBackup}
             onBackupTatt={async () => {
               const dato = iDag();
@@ -728,16 +789,54 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, onLagreEgetTelefon, stil }) {
-  const { C, input, etikett, primKnapp, kort } = stil;
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, onLagreEgetTelefon, stil }) {
+  const { C, input, etikett, primKnapp, kort, sekKnapp } = stil;
   const [sok, setSok] = useState("");
   const [redigerer, setRedigerer] = useState(false);
   const [nyttTelefon, setNyttTelefon] = useState("");
   const [feil, setFeil] = useState("");
+  const [valgte, setValgte] = useState(new Set());
+  const [smsModus, setSmsModus] = useState(false);
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
   const meg = medlemmer.find((m) => m.id === bruker.id);
+  const medTelefon = sortert.filter((m) => m.telefon);
+
+  // Automatiske prosjektgrupper: alle som har ført timer på prosjektet + ansvarlige
+  const prosjektGrupper = prosjekter.map((p) => {
+    const fraTimer = innslag.filter((i) => i.prosjektId === p.id).map((i) => i.medlemId);
+    const ansvarlige = ledereAv(p);
+    return { id: `prosjekt-${p.id}`, navn: `🔨 ${p.navn}`, medlemmer: [...new Set([...fraTimer, ...ansvarlige])], auto: true };
+  }).filter((g) => g.medlemmer.length > 0);
+
+  // Alle tilgjengelige grupper (manuelle + automatiske prosjekt)
+  const alleGrupper = [...(grupper || []), ...prosjektGrupper];
+
+  function toggleValgt(id) {
+    setValgte((v) => { const ny = new Set(v); ny.has(id) ? ny.delete(id) : ny.add(id); return ny; });
+  }
+
+  function velgGruppe(gruppeId) {
+    const g = alleGrupper.find((x) => x.id === gruppeId);
+    if (!g) return;
+    const medNummer = g.medlemmer.filter((mid) => medlemmer.find((m) => m.id === mid)?.telefon);
+    setValgte(new Set(medNummer));
+  }
+
+  function velgAlle() {
+    setValgte(new Set(filtrert.filter((m) => m.telefon).map((m) => m.id)));
+  }
+
+  function fjernAlle() { setValgte(new Set()); }
+
+  function sendSms() {
+    const numre = [...valgte].map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+    if (numre.length === 0) return;
+    const a = document.createElement("a");
+    a.href = `sms:${numre.join(",")}`;
+    a.click();
+  }
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
@@ -746,8 +845,58 @@ function MedlemsRegister({ medlemmer, bruker, onLagreEgetTelefon, stil }) {
         <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
           Kontaktinfo til alle medlemmer i laget — kjekt hvis du vil ringe eller sende en melding.
         </p>
-        <input style={input} value={sok} onChange={(e) => setSok(e.target.value)} placeholder="Søk etter navn …" />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input style={{ ...input, flex: 1 }} value={sok} onChange={(e) => setSok(e.target.value)} placeholder="Søk etter navn …" />
+          <button style={{ ...sekKnapp, padding: "8px 14px", fontSize: 13, background: smsModus ? C.hav : undefined, color: smsModus ? C.kritt : undefined, borderColor: smsModus ? C.hav : undefined }}
+            onClick={() => { setSmsModus(!smsModus); setValgte(new Set()); }}>
+            💬 {smsModus ? "Avbryt SMS" : "Send SMS"}
+          </button>
+        </div>
       </div>
+
+      {smsModus && (
+        <div style={{ ...kort, borderLeft: `4px solid ${C.hav}`, display: "grid", gap: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5 }}>
+            💬 Velg hvem du vil sende SMS til
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>
+            Huk av de du vil sende til, trykk «Åpne i SMS-appen», skriv meldingen og send.
+            Bare medlemmer med registrert telefonnummer kan velges.
+          </p>
+          {alleGrupper.length > 0 && (
+            <div>
+              <label style={{ ...etikett, marginBottom: 4 }}>Velg fra gruppe</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {alleGrupper.map((g) => (
+                  <button key={g.id} style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => velgGruppe(g.id)}>
+                    {g.navn}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={velgAlle}>
+              Velg alle ({filtrert.filter((m) => m.telefon).length})
+            </button>
+            {valgte.size > 0 && (
+              <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={fjernAlle}>
+                Fjern alle
+              </button>
+            )}
+          </div>
+          {valgte.size > 0 && (
+            <button style={{ ...primKnapp, width: "100%" }} onClick={sendSms}>
+              💬 Åpne i SMS-appen ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
+            </button>
+          )}
+          {medTelefon.length === 0 && (
+            <p style={{ margin: 0, fontSize: 13, color: C.signal }}>
+              Ingen medlemmer har registrert telefonnummer ennå.
+            </p>
+          )}
+        </div>
+      )}
 
       <div style={kort}>
         <h3 style={{ margin: "0 0 8px", fontFamily: "Georgia, serif", fontSize: 16 }}>Min kontaktinfo</h3>
@@ -785,21 +934,42 @@ function MedlemsRegister({ medlemmer, bruker, onLagreEgetTelefon, stil }) {
       <div style={{ display: "grid", gap: 8 }}>
         {filtrert.length === 0 && <p style={{ color: C.dempet, textAlign: "center", padding: 18 }}>Ingen medlemmer funnet.</p>}
         {filtrert.map((m) => (
-          <div key={m.id} style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>
-                {m.navn}{m.id === bruker.id ? " (deg)" : ""}
-                {m.admin && <span style={{ marginLeft: 8, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
+          <div key={m.id}
+            onClick={() => smsModus && m.telefon && toggleValgt(m.id)}
+            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+              cursor: smsModus && m.telefon ? "pointer" : "default",
+              borderColor: smsModus && valgte.has(m.id) ? C.hav : undefined,
+              borderWidth: smsModus && valgte.has(m.id) ? 2 : 1,
+              background: smsModus && valgte.has(m.id) ? "#EAF0F5" : undefined,
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {smsModus && (
+                <input type="checkbox" checked={valgte.has(m.id)} disabled={!m.telefon}
+                  onChange={() => m.telefon && toggleValgt(m.id)}
+                  style={{ width: 18, height: 18, cursor: m.telefon ? "pointer" : "not-allowed", accentColor: C.hav }} />
+              )}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>
+                  {m.navn}{m.id === bruker.id ? " (deg)" : ""}
+                  {m.admin && <span style={{ marginLeft: 8, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
+                </div>
+                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"}</div>
               </div>
-              <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"}</div>
             </div>
-            {m.telefon ? (
-              <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-                📞 {m.telefon}
-              </a>
-            ) : (
-              <span style={{ fontSize: 13, color: C.dempet }}>Ingen telefon</span>
+            {!smsModus && (
+              m.telefon ? (
+                <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                  📞 {m.telefon}
+                </a>
+              ) : (
+                <span style={{ fontSize: 13, color: C.dempet }}>Ingen telefon</span>
+              )
+            )}
+            {smsModus && (
+              <span style={{ fontSize: 13, color: m.telefon ? C.tjaere : C.dempet, fontWeight: m.telefon ? 600 : 400 }}>
+                {m.telefon || "ingen telefon"}
+              </span>
             )}
           </div>
         ))}
@@ -1468,11 +1638,11 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
               <label style={etikett}>Fra kl.</label>
-              <input type="time" style={input} value={tid} onChange={(e) => setTid(e.target.value)} />
+              <TidVelger value={tid} onChange={setTid} style={input} />
             </div>
             <div>
               <label style={etikett}>Til kl. (valgfritt)</label>
-              <input type="time" style={input} value={tidSlutt} onChange={(e) => setTidSlutt(e.target.value)} />
+              <TidVelger value={tidSlutt} onChange={setTidSlutt} style={input} />
             </div>
           </div>
           <div>
@@ -2585,14 +2755,23 @@ function Rapport({ innslag, medlemmer, prosjekter, dugnader, altTilgang, stil })
 // ============================================================
 // Adminpanel
 // ============================================================
-function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, bruker, logo, sisteBackup, onBackupTatt, onLagreMeta, onLagreUtleie, onNyAktivitet, onEndreAktivitet, onSlettAktivitet, onLagreLogo, onGjenopprett, onSlettDugnad, onSlettProsjekt, onOppdaterProsjekt, stil }) {
-  const { C, sekKnapp, kort, primKnapp, input, bekreft, sporsmaal, varsle } = stil;
+function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, bruker, logo, grupper, onLagreGrupper, onLeggTilMedlem, sisteBackup, onBackupTatt, onLagreMeta, onLagreUtleie, onNyAktivitet, onEndreAktivitet, onSlettAktivitet, onLagreLogo, onGjenopprett, onSlettDugnad, onSlettProsjekt, onOppdaterProsjekt, stil }) {
+  const { C, sekKnapp, kort, primKnapp, input, etikett, bekreft, sporsmaal, varsle } = stil;
   const [jobber, setJobber] = useState(false);
   const [nyAkt, setNyAkt] = useState("");
   const [nyttObjektNavn, setNyttObjektNavn] = useState("");
   const [nyttObjektType, setNyttObjektType] = useState("lokale");
   const [lagring, setLagring] = useState(null);
   const [regnerLagring, setRegnerLagring] = useState(false);
+  // Nytt medlem
+  const [nyttMedlemNavn, setNyttMedlemNavn] = useState("");
+  const [nyttMedlemEpost, setNyttMedlemEpost] = useState("");
+  const [nyttMedlemTelefon, setNyttMedlemTelefon] = useState("");
+  const [nyttMedlemFeil, setNyttMedlemFeil] = useState("");
+  const [viserNyttMedlem, setViserNyttMedlem] = useState(false);
+  // Grupper
+  const [nyGruppeNavn, setNyGruppeNavn] = useState("");
+  const [apenGruppe, setApenGruppe] = useState(null); // gruppe-id for å redigere
   const [autoBackuper, setAutoBackuper] = useState(null);
   const [henterAutoBackuper, setHenterAutoBackuper] = useState(false);
   const timerFor = (mid) => innslag.filter((i) => i.medlemId === mid).reduce((s, i) => s + i.timer, 0);
@@ -2964,9 +3143,48 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
       {/* Medlemmer */}
       <div style={kort}>
         <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Medlemmer</h2>
-        <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: C.dempet }}>
           Dere kan ha så mange admin dere vil. «Prosjektrettigheter» lar et medlem opprette prosjekter, «utleierettigheter» lar dem legge inn utleie — uten å være admin. «Send nytt passord» sender medlemmet en e-post for å lage nytt passord. «Blokker» stenger noen ute fra å logge inn, men timer, prosjekter og bilder de har lagt inn blir værende i loggen og rapportene.
         </p>
+
+        {/* Legg til nytt medlem manuelt */}
+        {!viserNyttMedlem ? (
+          <button style={{ ...sekKnapp, marginBottom: 14 }} onClick={() => setViserNyttMedlem(true)}>
+            + Legg til medlem manuelt
+          </button>
+        ) : (
+          <div style={{ background: C.kritt, borderRadius: 8, padding: 14, marginBottom: 14, display: "grid", gap: 10 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Legg til nytt medlem</div>
+            {nyttMedlemFeil && <div style={{ background: "#FBEAE8", color: C.signal, padding: "7px 10px", borderRadius: 6, fontSize: 13 }}>{nyttMedlemFeil}</div>}
+            <div>
+              <label style={etikett}>Fullt navn</label>
+              <input style={input} value={nyttMedlemNavn} onChange={(e) => setNyttMedlemNavn(e.target.value)} placeholder="f.eks. Kari Olsvik" />
+            </div>
+            <div>
+              <label style={etikett}>Telefonnummer</label>
+              <input type="tel" style={input} value={nyttMedlemTelefon} onChange={(e) => setNyttMedlemTelefon(e.target.value)} placeholder="f.eks. 912 34 567" />
+            </div>
+            <div>
+              <label style={etikett}>E-post (valgfritt)</label>
+              <input type="email" style={input} value={nyttMedlemEpost} onChange={(e) => setNyttMedlemEpost(e.target.value)} placeholder="din@epost.no" />
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: C.dempet }}>
+                Når personen registrerer seg i appen med samme e-post eller telefon, kobles de automatisk til denne profilen.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...primKnapp, padding: "8px 16px" }} onClick={async () => {
+                setNyttMedlemFeil("");
+                if (nyttMedlemNavn.trim().length < 2) { setNyttMedlemFeil("Skriv inn et navn."); return; }
+                if (!gyldigTelefon(nyttMedlemTelefon) && !nyttMedlemTelefon.trim()) { setNyttMedlemFeil("Skriv inn telefonnummer."); return; }
+                if (nyttMedlemEpost.trim() && !gyldigEpost(nyttMedlemEpost)) { setNyttMedlemFeil("Ugyldig e-postadresse."); return; }
+                const ny = { id: nyId(), navn: nyttMedlemNavn.trim(), telefon: nyttMedlemTelefon.trim(), epost: nyttMedlemEpost.trim().toLowerCase(), admin: false, pin: "" };
+                await onLeggTilMedlem(ny);
+                setNyttMedlemNavn(""); setNyttMedlemTelefon(""); setNyttMedlemEpost(""); setViserNyttMedlem(false);
+              }}>Legg til</button>
+              <button style={{ ...sekKnapp, padding: "8px 16px" }} onClick={() => { setViserNyttMedlem(false); setNyttMedlemFeil(""); }}>Avbryt</button>
+            </div>
+          </div>
+        )}
         {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
           <div key={m.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -3057,6 +3275,57 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
             </button>
           </div>
         ))}
+      </div>
+
+      {/* Grupper */}
+      <div style={kort}>
+        <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Grupper</h2>
+        <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
+          Lag egne grupper for SMS-utsendelse — f.eks. «Styret» eller «Båtmannskap». Grupper fra prosjekter lages automatisk.
+        </p>
+        {(grupper || []).map((g) => (
+          <div key={g.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 600 }}>{g.navn} <span style={{ fontSize: 12, color: C.dempet }}>({g.medlemmer.length} med telefon)</span></div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => setApenGruppe(apenGruppe === g.id ? null : g.id)}>
+                  {apenGruppe === g.id ? "Lukk" : "Endre"}
+                </button>
+                <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }} onClick={async () => {
+                  if (!(await bekreft(`Slette gruppen «${g.navn}»?`))) return;
+                  onLagreGrupper((grupper || []).filter((x) => x.id !== g.id));
+                }}>Slett</button>
+              </div>
+            </div>
+            {apenGruppe === g.id && (
+              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                  <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer",
+                    background: g.medlemmer.includes(m.id) ? C.hav : C.kritt,
+                    color: g.medlemmer.includes(m.id) ? C.kritt : C.tjaere,
+                    borderRadius: 999, padding: "4px 10px", border: `1px solid ${C.sand}` }}>
+                    <input type="checkbox" checked={g.medlemmer.includes(m.id)} style={{ display: "none" }}
+                      onChange={() => {
+                        const ny = g.medlemmer.includes(m.id) ? g.medlemmer.filter((x) => x !== m.id) : [...g.medlemmer, m.id];
+                        onLagreGrupper((grupper || []).map((x) => (x.id === g.id ? { ...x, medlemmer: ny } : x)));
+                      }} />
+                    {m.navn}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+        {(grupper || []).length === 0 && <p style={{ fontSize: 13, color: C.dempet, margin: "0 0 10px" }}>Ingen grupper ennå.</p>}
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <input style={{ ...input, flex: 1 }} value={nyGruppeNavn} onChange={(e) => setNyGruppeNavn(e.target.value)} placeholder="f.eks. Styret, Båtmannskap …" />
+          <button style={{ ...sekKnapp, padding: "8px 14px" }} onClick={() => {
+            const n = nyGruppeNavn.trim();
+            if (n.length < 2) return;
+            onLagreGrupper([...(grupper || []), { id: nyId(), navn: n, medlemmer: [] }]);
+            setNyGruppeNavn("");
+          }}>Opprett gruppe</button>
+        </div>
       </div>
 
       {/* Prosjekter */}
@@ -3597,11 +3866,11 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
               <label style={etikett}>Fra kl.{datoSlutt && datoSlutt !== dato ? " (startdag)" : ""}</label>
-              <input type="time" style={input} value={tid} onChange={(e) => setTid(e.target.value)} />
+              <TidVelger value={tid} onChange={setTid} style={input} />
             </div>
             <div>
               <label style={etikett}>Til kl.{datoSlutt && datoSlutt !== dato ? " (sluttdag)" : " (valgfritt)"}</label>
-              <input type="time" style={input} value={tidSlutt} onChange={(e) => setTidSlutt(e.target.value)} />
+              <TidVelger value={tidSlutt} onChange={setTidSlutt} style={input} />
             </div>
           </div>
           <div>
