@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.7";
+const APP_VERSJON = "3.5.8";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -806,6 +806,8 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   const [nyGruppeNavn, setNyGruppeNavn] = useState("");
   const [apenGruppe, setApenGruppe] = useState(null);
   const [visAdminDel, setVisAdminDel] = useState(false);
+  const [visUtskrift, setVisUtskrift] = useState(false);
+  const [utskriftGruppe, setUtskriftGruppe] = useState("");
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
@@ -1049,6 +1051,43 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
             )}
           </div>
         ))}
+      </div>
+
+      {/* Utskrift av kontaktliste */}
+      <div style={kort}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>🖨 Skriv ut kontaktliste</h3>
+            <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Navn og telefonnummer, klar til utskrift.</p>
+          </div>
+          <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisUtskrift(!visUtskrift)}>
+            {visUtskrift ? "Lukk" : "Velg og skriv ut"}
+          </button>
+        </div>
+        {visUtskrift && (
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <div>
+              <label style={etikett}>Filtrer på gruppe (valgfritt)</label>
+              <select style={input} value={utskriftGruppe} onChange={(e) => setUtskriftGruppe(e.target.value)}>
+                <option value="">Alle med telefonnummer</option>
+                {alleGrupper.map((g) => (
+                  <option key={g.id} value={g.id}>{g.navn}</option>
+                ))}
+              </select>
+            </div>
+            <button style={{ ...primKnapp, padding: "9px 16px" }} onClick={() => {
+              const valgtGruppe = utskriftGruppe ? alleGrupper.find((g) => g.id === utskriftGruppe) : null;
+              const utvalg = valgtGruppe
+                ? sortert.filter((m) => valgtGruppe.medlemmer.includes(m.id) && m.telefon)
+                : sortert.filter((m) => m.telefon);
+              const datoStr = new Date().toLocaleDateString("nb-NO", {dateStyle: "long"});
+              const rader = utvalg.map((m, i) => `<tr><td>${i + 1}</td><td>${m.navn}</td><td>${m.telefon}</td><td>${m.epost || ""}</td></tr>`).join("");
+              const html = `<!DOCTYPE html><html lang="nb"><head><meta charset="UTF-8"><title>Kontaktliste</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;color:#1B3A4B}h1{font-size:24px;margin-bottom:4px}.sub{color:#6B7A80;font-size:13px;margin:0 0 20px}table{width:100%;border-collapse:collapse}th{text-align:left;border-bottom:2px solid #C8BAA0;padding:6px 8px;font-size:13px;text-transform:uppercase}td{padding:8px;border-bottom:1px solid #EBE5DC;font-size:15px}tr:nth-child(even) td{background:#F7F5F0}</style></head><body><h1>Askøy Kystlag</h1><p class="sub">Kontaktliste${valgtGruppe ? ` \u2014 ${valgtGruppe.navn}` : ""} \u00b7 ${datoStr}</p><table><tr><th>#</th><th>Navn</th><th>Telefon</th><th>E-post</th></tr>${rader}</table></body></html>`;
+              const w = window.open("", "_blank");
+              if (w) { w.document.write(html); w.document.close(); w.print(); }
+            }}>Åpne og skriv ut</button>
+          </div>
+        )}
       </div>
 
       {erAdmin && (
