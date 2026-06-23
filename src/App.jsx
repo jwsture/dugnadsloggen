@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.6.1";
+const APP_VERSJON = "3.6.2";
 const APP_OPPDATERT = "22.06.2026";
 
 const AKT_STANDARD = [
@@ -55,33 +55,33 @@ const UTLEIE_STANDARD = {
   ledere: [], // utleieansvarlige — i tillegg til admin
 };
 const FOTO_ALLE = "akl-foto:";
-const fotoPrefiks = (pid) => `akl-foto:${pid}:`;
+function fotoPrefiks(pid) { return `akl-foto:${pid}:`; }
 
 function nyId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-const iDag = () => {
-  const n = new Date();
+function iDag() {
+  const n = new Date()
   return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 };
 function fDato(iso) { return iso ? iso.split("-").reverse().join(".") : ""; }
-const datoPluss = (iso, dager) => {
+function datoPluss(iso, dager) {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + dager);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-const fMndAar = (ym) => { const [y, m] = ym.split("-"); return `${MND[parseInt(m, 10) - 1]} ${y}`; };
+}
+function fMndAar(ym) { const [y, m] = ym.split("-"); return `${MND[parseInt(m, 10) - 1]} ${y}`; }
 function tall(t) { return String(Math.round(t * 10) / 10).replace(".", ","); }
 function fTid(d) { return d.tid ? ` kl. ${d.tid}${d.tidSlutt ? `–${d.tidSlutt}` : ""}` : ""; }
-const fUtleiePeriode = (b) => {
+function fUtleiePeriode(b) {
   const flerDogn = b.datoSlutt && b.datoSlutt !== b.dato;
   if (flerDogn) {
     return `${fDato(b.dato)}${b.tid ? ` kl. ${b.tid}` : ""} – ${fDato(b.datoSlutt)}${b.tidSlutt ? ` kl. ${b.tidSlutt}` : ""}`;
   }
   return `${fDato(b.dato)}${b.tid ? ` kl. ${b.tid}${b.tidSlutt ? `–${b.tidSlutt}` : ""}` : ""}`;
-};
-const esc = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function esc(s) { return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function gyldigEpost(e) { return /^\S+@\S+\.\S+$/.test(e.trim()); }
-const gyldigKode = (k) => /^\d{6}$/.test(k);
-const gyldigTelefon = (t) => /^[\d\s+]{8,15}$/.test(t.trim());
+function gyldigKode(k) { return /^\d{6}$/.test(k); }
+function gyldigTelefon(t) { return /^[\d\s+]{8,15}$/.test(t.trim()); }
 function ledereAv(p) { return Array.isArray(p.ledere) ? p.ledere : (p.lederId ? [p.lederId] : []); }
 
 async function lesOgKomprimer(fil, maks = 900, kvalitet = 0.72) {
