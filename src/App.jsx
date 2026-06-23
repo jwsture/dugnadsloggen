@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.14";
+const APP_VERSJON = "3.5.15";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -403,6 +403,23 @@ export default function Dugnadsloggen() {
       }
       const navn = session.user.user_metadata?.navn?.trim() || epost.split("@")[0];
       const nyTelefon = session.user.user_metadata?.telefon?.trim() || "";
+
+      // Sjekk om personen finnes som ekstern kontakt — oppgrader i så fall automatisk
+      const eksternKontakter = kontakter || [];
+      const eksternMatch = eksternKontakter.find((k) =>
+        (k.epost && k.epost.toLowerCase() === epost) ||
+        (nyTelefon && k.telefon && k.telefon.replace(/\s+/g, "") === nyTelefon.replace(/\s+/g, ""))
+      );
+      if (eksternMatch) {
+        // Konverter ekstern kontakt til fullverdig medlem
+        const nyttMedlem = { ...eksternMatch, epost, admin: naavaerende.length === 0, pin: "" };
+        await lagreMeta([...naavaerende, nyttMedlem]);
+        // Fjern fra ekstern-listen (async, ikke blokkerende)
+        lagreKontakter(eksternKontakter.filter((k) => k.id !== eksternMatch.id));
+        setBruker({ id: eksternMatch.id, navn: eksternMatch.navn });
+        return;
+      }
+
       const ny = { id: nyId(), navn, epost, telefon: nyTelefon, pin: "", admin: naavaerende.length === 0 };
       await lagreMeta([...naavaerende, ny]);
       setBruker({ id: ny.id, navn: ny.navn });
@@ -915,9 +932,31 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
             )}
           </div>
           {valgte.size > 0 && (
-            <button style={{ ...primKnapp, width: "100%" }} onClick={sendSms}>
-              💬 Åpne i SMS-appen ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={{ ...primKnapp, flex: 1 }} onClick={sendSms}>
+                💬 Åpne i SMS-appen ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
+              </button>
+              <button style={{ ...sekKnapp, padding: "9px 14px", fontSize: 14 }}
+                title="Bruk denne på iPhone hvis SMS-appen bare åpner med én mottaker"
+                onClick={async () => {
+                  const alleKontakter = kontakter || [];
+                  const numre = [...valgte]
+                    .map((id) => {
+                      const m = medlemmer.find((x) => x.id === id);
+                      if (m) return m.telefon;
+                      return alleKontakter.find((k) => k.id === id)?.telefon;
+                    })
+                    .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+                  try {
+                    await navigator.clipboard.writeText(numre.join("; "));
+                    await varsle(`${numre.length} nummer kopiert!\n\nLim dem inn i mottaker-feltet i SMS-appen din (fungerer best på iPhone).`);
+                  } catch (e) {
+                    await varsle(`Numre (kopier manuelt):\n\n${numre.join("; ")}`);
+                  }
+                }}>
+                📋 Kopier numre
+              </button>
+            </div>
           )}
           {medTelefon.length === 0 && (
             <p style={{ margin: 0, fontSize: 13, color: C.signal }}>Ingen medlemmer har registrert telefonnummer ennå.</p>
@@ -1184,11 +1223,22 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{k.navn}</div>
                     <div style={{ fontSize: 12.5, color: C.dempet }}>{k.telefon}{k.epost ? ` · ${k.epost}` : ""}</div>
                   </div>
-                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
-                    onClick={async () => {
-                      if (!(await bekreft(`Slette kontakten «${k.navn}»?`))) return;
-                      onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
-                    }}>Slett</button>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: "#4E7E5B", color: "#2F5A3C" }}
+                      onClick={async () => {
+                        if (!(await bekreft(`Gjøre ${k.navn} til fullverdig medlem?\n\nDe vil da dukke opp i dugnadslister, timer og rapporter. Kontakten fjernes fra ekstern-listen.`))) return;
+                        // Legg til som vanlig medlem
+                        const nyttMedlem = { id: k.id, navn: k.navn, telefon: k.telefon, epost: k.epost || "", pin: "", admin: false };
+                        onLagreMeta([...medlemmer, nyttMedlem]);
+                        // Fjern fra ekstern-listen
+                        onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
+                      }}>👤 Gjør til medlem</button>
+                    <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
+                      onClick={async () => {
+                        if (!(await bekreft(`Slette kontakten «${k.navn}»?`))) return;
+                        onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
+                      }}>Slett</button>
+                  </div>
                 </div>
               ))}
               <div style={{ display: "grid", gap: 8, marginTop: 4, background: C.kritt, borderRadius: 8, padding: 12 }}>
