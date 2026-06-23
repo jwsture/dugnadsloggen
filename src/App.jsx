@@ -18,8 +18,8 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5";
-const APP_OPPDATERT = "20.06.2026";
+const APP_VERSJON = "3.6";
+const APP_OPPDATERT = "22.06.2026";
 
 const AKT_STANDARD = [
   "Båtvedlikehold",
@@ -43,6 +43,7 @@ const K_UTLEIE = "akl-utleie";
 const K_BACKUPINFO = "akl-backupinfo";
 const K_GAMMEL = "askoy-kystlag-dugnad";
 const K_GRUPPER = "akl-grupper";
+const K_KONTAKTER = "akl-kontakter";
 const UTLEIE_STANDARD = {
   objekter: [
     { id: "lokale-a", navn: "Lokale 1", type: "lokale" },
@@ -173,6 +174,7 @@ export default function Dugnadsloggen() {
   const [logo, setLogo] = useState(null);
   const [sisteBackup, setSisteBackup] = useState(null);
   const [grupper, setGrupper] = useState([]);
+  const [kontakter, setKontakter] = useState([]);
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
@@ -260,6 +262,10 @@ export default function Dugnadsloggen() {
         if (r?.value) setGrupper(JSON.parse(r.value));
       } catch (e) { /* ingen grupper ennå */ }
       try {
+        const r = await window.storage.get(K_KONTAKTER, true);
+        if (r?.value) setKontakter(JSON.parse(r.value));
+      } catch (e) { /* ingen kontakter ennå */ }
+      try {
         const r = await window.storage.get(K_BACKUPINFO, true);
         if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
       } catch (e) { /* ingen backup tatt ennå */ }
@@ -310,6 +316,7 @@ export default function Dugnadsloggen() {
   const lagreInnslag = lagre(K_INNSLAG, setInnslag, "Kunne ikke lagre timene.");
   const lagreDugnader = lagre(K_DUGNAD, setDugnader, "Kunne ikke lagre dugnaden.");
   const lagreGrupper = lagre(K_GRUPPER, setGrupper, "Kunne ikke lagre grupper.");
+  const lagreKontakter = lagre(K_KONTAKTER, setKontakter, "Kunne ikke lagre kontakter.");
   const lagreAktiviteter = lagre(K_AKT, setAktiviteter, "Kunne ikke lagre aktivitetslisten.");
   const lagreUtleie = lagre(K_UTLEIE, setUtleie, "Kunne ikke lagre utleiedataene.");
 
@@ -591,8 +598,11 @@ export default function Dugnadsloggen() {
         {fane === "medlemmer" && (
           <MedlemsRegister
             medlemmer={medlemmer} bruker={bruker} grupper={grupper} prosjekter={prosjekter} innslag={innslag}
+            kontakter={kontakter}
             erAdmin={erAdmin}
             onLagreGrupper={lagreGrupper}
+            onLagreKontakter={lagreKontakter}
+            onLagreMeta={lagreMeta}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
@@ -791,9 +801,16 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAdmin, onLagreGrupper, onLagreEgetTelefon, stil }) {
-  const { C, input, etikett, primKnapp, kort, sekKnapp } = stil;
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kontakter, erAdmin, onLagreGrupper, onLagreKontakter, onLagreMeta, onLagreEgetTelefon, stil }) {
+  const { C, input, etikett, primKnapp, kort, sekKnapp, bekreft, sporsmaal } = stil;
   const [sok, setSok] = useState("");
+  const [visAdminDel, setVisAdminDel] = useState(false);
+  const [visKontakter, setVisKontakter] = useState(false);
+  const [nyttKontaktNavn, setNyttKontaktNavn] = useState("");
+  const [nyttKontaktTelefon, setNyttKontaktTelefon] = useState("");
+  const [nyttKontaktEpost, setNyttKontaktEpost] = useState("");
+  const [visUtskrift, setVisUtskrift] = useState(false);
+  const [utskriftGruppe, setUtskriftGruppe] = useState("");
   const [redigerer, setRedigerer] = useState(false);
   const [nyttTelefon, setNyttTelefon] = useState("");
   const [feil, setFeil] = useState("");
@@ -825,7 +842,11 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   function velgGruppe(gruppeId) {
     const g = alleGrupper.find((x) => x.id === gruppeId);
     if (!g) return;
-    const medNummer = g.medlemmer.filter((mid) => medlemmer.find((m) => m.id === mid)?.telefon);
+    // Inkluder både vanlige medlemmer og eksterne kontakter som er i gruppen
+    const medNummer = g.medlemmer.filter((mid) =>
+      medlemmer.find((m) => m.id === mid)?.telefon ||
+      (kontakter || []).find((k) => k.id === mid)?.telefon
+    );
     setValgte(new Set(medNummer));
   }
 
@@ -836,7 +857,16 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   function fjernAlle() { setValgte(new Set()); }
 
   function sendSms() {
-    const numre = [...valgte].map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+    const alleKontakter = [...(kontakter || [])];
+    const numre = [...valgte]
+      .map((id) => {
+        const m = medlemmer.find((m) => m.id === id);
+        if (m) return m.telefon;
+        const k = alleKontakter.find((k) => k.id === id);
+        return k?.telefon;
+      })
+      .filter(Boolean)
+      .map((t) => t.replace(/\s+/g, ""));
     if (numre.length === 0) return;
     const a = document.createElement("a");
     a.href = `sms:${numre.join(";")}`;
@@ -922,9 +952,25 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
                 <div key={g.id} style={{ background: C.kritt, borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 600 }}>{g.navn} <span style={{ fontSize: 12, color: C.dempet, fontWeight: 400 }}>({g.medlemmer.length} valgt)</span></span>
-                    <div style={{ display: "flex", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => setApenGruppe(apenGruppe === g.id ? null : g.id)}>
                         {apenGruppe === g.id ? "Lukk" : "Velg medlemmer"}
+                      </button>
+                      <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, background: C.hav, color: C.kritt, borderColor: C.hav }}
+                        onClick={() => {
+                          const numre = g.medlemmer
+                            .map((id) => medlemmer.find((m) => m.id === id)?.telefon)
+                            .filter(Boolean)
+                            .map((t) => t.replace(/\s+/g, ""));
+                          if (numre.length === 0) {
+                            alert("Ingen i denne gruppen har registrert telefonnummer.");
+                            return;
+                          }
+                          const a = document.createElement("a");
+                          a.href = `sms:${numre.join(";")}`;
+                          a.click();
+                        }}>
+                        💬 Send SMS{g.medlemmer.length > 0 ? ` (${g.medlemmer.length})` : ""}
                       </button>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
                         onClick={async () => {
@@ -935,7 +981,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
                   </div>
                   {apenGruppe === g.id && (
                     <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                      {[...sortert, ...(kontakter || [])].map((m) => (
                         <label key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, cursor: "pointer",
                           background: g.medlemmer.includes(m.id) ? C.hav : "#fff",
                           color: g.medlemmer.includes(m.id) ? C.kritt : C.tjaere,
@@ -945,7 +991,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
                               const ny = g.medlemmer.includes(m.id) ? g.medlemmer.filter((x) => x !== m.id) : [...g.medlemmer, m.id];
                               onLagreGrupper((grupper || []).map((x) => (x.id === g.id ? { ...x, medlemmer: ny } : x)));
                             }} />
-                          {m.navn}
+                          {m.navn}{m.ekstern ? " 📋" : ""}
                         </label>
                       ))}
                     </div>
@@ -1049,12 +1095,147 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
           </div>
         ))}
       </div>
+      {/* Utskrift av kontaktliste */}
+      <div style={kort}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>🖨 Skriv ut kontaktliste</h3>
+            <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Navn og telefonnummer, klar til utskrift.</p>
+          </div>
+          <button style={{ ...sekKnapp, padding: "6px 14px", fontSize: 13 }} onClick={() => setVisUtskrift(!visUtskrift)}>
+            {visUtskrift ? "Lukk" : "Velg og skriv ut"}
+          </button>
+        </div>
+        {visUtskrift && (
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <div>
+              <label style={etikett}>Filtrer på gruppe (valgfritt)</label>
+              <select style={input} value={utskriftGruppe} onChange={(e) => setUtskriftGruppe(e.target.value)}>
+                <option value="">Alle med telefonnummer</option>
+                {[...(grupper || []), ...prosjektGrupper].map((g) => (
+                  <option key={g.id} value={g.id}>{g.navn}</option>
+                ))}
+              </select>
+            </div>
+            <button style={{ ...primKnapp, padding: "9px 16px" }} onClick={() => {
+              const valgtGruppe = utskriftGruppe ? [...(grupper || []), ...prosjektGrupper].find((g) => g.id === utskriftGruppe) : null;
+              const utvalg = valgtGruppe
+                ? [...(kontakter || []).filter((k) => valgtGruppe.medlemmer.includes(k.id)), ...sortert.filter((m) => valgtGruppe.medlemmer.includes(m.id) && m.telefon)]
+                : [...sortert.filter((m) => m.telefon), ...(kontakter || []).filter((k) => k.telefon)];
+              const html = `<!DOCTYPE html><html lang="nb"><head><meta charset="UTF-8"><title>Kontaktliste — Askøy Kystlag</title>
+              <style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;color:#1B3A4B}h1{font-size:24px;margin-bottom:4px}p.sub{color:#6B7A80;font-size:13px;margin:0 0 20px}table{width:100%;border-collapse:collapse}th{text-align:left;border-bottom:2px solid #C8BAA0;padding:6px 8px;font-size:13px;letter-spacing:.08em;text-transform:uppercase}td{padding:8px 8px;border-bottom:1px solid #EBE5DC;font-size:15px}tr:nth-child(even) td{background:#F7F5F0}@media print{body{margin:20px}}</style></head>
+              <body><h1>Askøy Kystlag</h1><p class="sub">Kontaktliste${valgtGruppe ? ` — ${valgtGruppe.navn}` : ""} · Skrevet ut ${new Date().toLocaleDateString("nb-NO", {dateStyle:"long"})}</p>
+              <table><tr><th>#</th><th>Navn</th><th>Telefon</th><th>E-post</th></tr>
+              ${utvalg.map((m, i) => `<tr><td>${i + 1}</td><td>${m.navn}</td><td>${m.telefon || ""}</td><td>${m.epost || ""}</td></tr>`).join("")}
+              </table></body></html>`;
+              const w = window.open("", "_blank");
+              if (w) { w.document.write(html); w.document.close(); w.print(); }
+            }}>Åpne og skriv ut</button>
+          </div>
+        )}
+      </div>
+
+      {/* Eksterne kontakter — kun SMS, ikke dugnad */}
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>📋 Eksterne kontakter</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Kun for SMS-grupper — vises ikke i timer, logg eller rapport.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisKontakter(!visKontakter)}>
+              {visKontakter ? "Lukk" : `Administrer (${(kontakter || []).length})`}
+            </button>
+          </div>
+          {visKontakter && (
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              {(kontakter || []).length === 0 && <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>Ingen eksterne kontakter ennå.</p>}
+              {(kontakter || []).map((k) => (
+                <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderBottom: `1px solid ${C.sand}` }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{k.navn}</div>
+                    <div style={{ fontSize: 12.5, color: C.dempet }}>{k.telefon}{k.epost ? ` · ${k.epost}` : ""}</div>
+                  </div>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
+                    onClick={async () => {
+                      if (!(await bekreft(`Slette kontakten «${k.navn}»?`))) return;
+                      onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
+                    }}>Slett</button>
+                </div>
+              ))}
+              <div style={{ display: "grid", gap: 8, marginTop: 4, background: C.kritt, borderRadius: 8, padding: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Legg til ekstern kontakt</div>
+                <input style={input} value={nyttKontaktNavn} onChange={(e) => setNyttKontaktNavn(e.target.value)} placeholder="Navn" />
+                <input type="tel" style={input} value={nyttKontaktTelefon} onChange={(e) => setNyttKontaktTelefon(e.target.value)} placeholder="Telefonnummer" />
+                <input type="email" style={input} value={nyttKontaktEpost} onChange={(e) => setNyttKontaktEpost(e.target.value)} placeholder="E-post (valgfritt)" />
+                <button style={{ ...primKnapp, padding: "8px 16px" }} onClick={() => {
+                  const n = nyttKontaktNavn.trim(); const t = nyttKontaktTelefon.trim();
+                  if (n.length < 2 || !t) return;
+                  onLagreKontakter([...(kontakter || []), { id: nyId(), navn: n, telefon: t, epost: nyttKontaktEpost.trim().toLowerCase(), ekstern: true }]);
+                  setNyttKontaktNavn(""); setNyttKontaktTelefon(""); setNyttKontaktEpost("");
+                }}>Legg til kontakt</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Admin-del: administrer medlemmer */}
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>⚙️ Administrer medlemmer</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Roller, e-post, telefon, passord og blokkering — kun synlig for admin.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisAdminDel(!visAdminDel)}>
+              {visAdminDel ? "Lukk" : "Åpne"}
+            </button>
+          </div>
+          {visAdminDel && (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: "0 0 12px", fontSize: 12.5, color: C.dempet }}>
+                For fullstendig administrasjon (roller, passord, utleierettigheter, grupper) bruk <strong>Admin-fanen</strong>.
+              </p>
+              {sortert.map((m) => (
+                <div key={m.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <span style={{ fontWeight: 600 }}>{m.navn}</span>
+                      {m.admin && <span style={{ marginLeft: 6, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px" }}>ADMIN</span>}
+                      {!m.admin && m.kanProsjekt && <span style={{ marginLeft: 6, fontSize: 10.5, background: C.sjogronn, color: "#fff", borderRadius: 4, padding: "2px 6px" }}>PROSJEKT</span>}
+                      {!m.admin && m.kanUtleie && <span style={{ marginLeft: 6, fontSize: 10.5, background: "#7A5C3E", color: "#fff", borderRadius: 4, padding: "2px 6px" }}>UTLEIE</span>}
+                      {m.blokkert && <span style={{ marginLeft: 6, fontSize: 10.5, background: C.signal, color: "#fff", borderRadius: 4, padding: "2px 6px" }}>BLOKKERT</span>}
+                      <div style={{ fontSize: 12, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"} · {m.telefon || "ingen telefon"}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      {m.id !== bruker.id && (
+                        <button style={{ ...sekKnapp, padding: "4px 9px", fontSize: 11 }}
+                          onClick={() => onLagreMeta(sortert.map((x) => x.id === m.id ? { ...x, admin: !x.admin } : x))}>
+                          {m.admin ? "Fjern admin" : "Gjør til admin"}
+                        </button>
+                      )}
+                      {m.id !== bruker.id && !m.admin && (
+                        <button style={{ ...sekKnapp, padding: "4px 9px", fontSize: 11, borderColor: m.blokkert ? "#4E7E5B" : C.signal, color: m.blokkert ? "#2F5A3C" : C.signal }}
+                          onClick={async () => {
+                            if (!(await bekreft(m.blokkert ? `Gjenåpne tilgangen for ${m.navn}?` : `Blokkere ${m.navn}?`))) return;
+                            onLagreMeta(sortert.map((x) => x.id === m.id ? { ...x, blokkert: !x.blokkert } : x));
+                          }}>
+                          {m.blokkert ? "Gjenåpne" : "Blokker"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
     </section>
   );
 }
-
-// ============================================================
-// "Legg til på hjem-skjermen" — veiledning tilpasset enheten
 // ============================================================
 function gjenkjennPlattform() {
   if (typeof navigator === "undefined") return "ukjent";
