@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.10";
+const APP_VERSJON = "3.5.13";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -918,6 +918,23 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
           {medTelefon.length === 0 && (
             <p style={{ margin: 0, fontSize: 13, color: C.signal }}>Ingen medlemmer har registrert telefonnummer ennå.</p>
           )}
+          {erAdmin && (
+            <div style={{ borderTop: `1px solid ${C.sand}`, paddingTop: 10, marginTop: 4 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>➕ Legg til ekstern kontakt</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <input style={{ ...input, flex: 2, minWidth: 130 }} value={nyttKontaktNavn} onChange={(e) => setNyttKontaktNavn(e.target.value)} placeholder="Navn" />
+                <input type="tel" style={{ ...input, flex: 2, minWidth: 120 }} value={nyttKontaktTelefon} onChange={(e) => setNyttKontaktTelefon(e.target.value)} placeholder="Telefon" />
+                <button style={{ ...sekKnapp, padding: "8px 12px", fontSize: 13 }} onClick={() => {
+                  const n = nyttKontaktNavn.trim();
+                  const t = nyttKontaktTelefon.trim();
+                  if (n.length < 2 || !t) return;
+                  onLagreKontakter([...(kontakter || []), { id: nyId(), navn: n, telefon: t, epost: "", ekstern: true }]);
+                  setNyttKontaktNavn(""); setNyttKontaktTelefon("");
+                }}>Legg til</button>
+              </div>
+              <p style={{ margin: "5px 0 0", fontSize: 12, color: C.dempet }}>Eksterne kontakter kan legges til SMS-grupper men vises ikke i dugnadslisten.</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -938,15 +955,23 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
               {(grupper || []).map((g) => (
                 <div key={g.id} style={{ background: C.kritt, borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 600 }}>{g.navn} <span style={{ fontSize: 12, color: C.dempet, fontWeight: 400 }}>({g.medlemmer.length} valgt)</span></span>
+                    <span style={{ fontWeight: 600 }}>{g.navn}
+                      {" "}<span style={{ fontSize: 12, color: C.dempet, fontWeight: 400 }}>({g.medlemmer.length} valgt)</span>
+                      {g.medlemmer.length > 0 && g.medlemmer.every((id) => !medlemmer.find((m) => m.id === id)) && (
+                        <span style={{ marginLeft: 8, fontSize: 11, background: "#E0A93E", color: "#fff", borderRadius: 4, padding: "2px 6px" }}>⚠ Trenger oppdatering</span>
+                      )}
+                    </span>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }} onClick={() => setApenGruppe(apenGruppe === g.id ? null : g.id)}>
                         {apenGruppe === g.id ? "Lukk" : "Velg medlemmer"}
                       </button>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, background: C.hav, color: C.kritt, borderColor: C.hav }}
-                        onClick={() => {
+                        onClick={async () => {
                           const numre = g.medlemmer.map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
-                          if (numre.length === 0) { alert("Ingen i denne gruppen har registrert telefonnummer."); return; }
+                          if (numre.length === 0) {
+                            await varsle("Ingen i denne gruppen har telefonnummer. Gruppen kan inneholde gamle medlems-IDer — åpne «Velg medlemmer» og huk av på nytt.");
+                            return;
+                          }
                           const a = document.createElement("a"); a.href = `sms:${numre.join(";")}`;  a.click();
                         }}>
                         💬 Send SMS{g.medlemmer.length > 0 ? ` (${g.medlemmer.length})` : ""}
@@ -1595,7 +1620,7 @@ function Innlogging({ logo, stil }) {
 // Kalender
 // ============================================================
 function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, aktiviteter, onLagre, onFoerTimer, stil }) {
-  const { C, input, etikett, primKnapp, sekKnapp, kort } = stil;
+  const { C, input, etikett, primKnapp, sekKnapp, kort, bekreft, varsle } = stil;
   const [viserSkjema, setViserSkjema] = useState(false);
   const [tittel, setTittel] = useState("");
   const [dato, setDato] = useState("");
@@ -1657,10 +1682,10 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
     return linjer.join("\n");
   }
 
-  function sendEpostVarsel(d, omfang) {
+  async function sendEpostVarsel(d, omfang) {
     const mottakere = epostMottakere(d, omfang);
     if (mottakere.length === 0) {
-      window.alert("Fant ingen mottakere med registrert e-postadresse for dette utvalget.");
+      await varsle("Fant ingen mottakere med registrert e-postadresse for dette utvalget.");
       return;
     }
     const bcc = mottakere.map((m) => m.epost).join(",");
