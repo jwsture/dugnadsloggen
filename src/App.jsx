@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.6.2";
+const APP_VERSJON = "3.6.3";
 const APP_OPPDATERT = "22.06.2026";
 
 const AKT_STANDARD = [
@@ -120,10 +120,12 @@ function lastNedCSV(rader, filnavn) {
 // Tidsvelger: kun hele timer + kvarter (00, 15, 30, 45) — for konsistens
 // overalt hvor klokkeslett velges (dugnader, utleie m.m.)
 // ============================================================
+// Statiske arrays utenfor komponenten — Vite hoister disse uansett, bedre å gjøre det eksplisitt
+const TIDVELGER_TIMER = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const TIDVELGER_MIN = ["00", "15", "30", "45"];
+
 function TidVelger({ value, onChange, style }) {
   const [time, minutt] = value ? value.split(":") : ["", ""];
-  const timer = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const minutter = ["00", "15", "30", "45"];
 
   function settTime(nyTime) {
     onChange(`${nyTime}:${minutt || "00"}`);
@@ -136,12 +138,12 @@ function TidVelger({ value, onChange, style }) {
     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
       <select style={{ ...style, flex: 1 }} value={time} onChange={(e) => settTime(e.target.value)}>
         <option value="">Time</option>
-        {timer.map((t) => <option key={t} value={t}>{t}</option>)}
+        {TIDVELGER_TIMER.map((t) => <option key={t} value={t}>{t}</option>)}
       </select>
       <span style={{ fontWeight: 700, color: "#6B7A80" }}>:</span>
       <select style={{ ...style, flex: 1 }} value={minutt} onChange={(e) => settMinutt(e.target.value)}>
         <option value="">Min</option>
-        {minutter.map((m) => <option key={m} value={m}>{m}</option>)}
+        {TIDVELGER_MIN.map((m) => <option key={m} value={m}>{m}</option>)}
       </select>
     </div>
   );
