@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.9";
+const APP_VERSJON = "3.5.10";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -1072,6 +1072,28 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                 {m.telefon || "ingen telefon"}
               </span>
             )}
+          </div>
+        ))}
+
+        {/* Eksterne kontakter vises nederst i SMS-modus */}
+        {smsModus && (kontakter || []).filter((k) => k.telefon).map((k) => (
+          <div key={k.id}
+            onClick={() => toggleValgt(k.id)}
+            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+              cursor: "pointer",
+              borderColor: valgte.has(k.id) ? C.hav : undefined,
+              borderWidth: valgte.has(k.id) ? 2 : 1,
+              background: valgte.has(k.id) ? "#EAF0F5" : undefined,
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input type="checkbox" checked={valgte.has(k.id)} onChange={() => toggleValgt(k.id)}
+                style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.hav }} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{k.navn} <span style={{ fontSize: 11, color: C.dempet, fontWeight: 400 }}>📋 ekstern</span></div>
+                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{k.epost || "ingen e-post"}</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 13, color: C.tjaere, fontWeight: 600 }}>{k.telefon}</span>
           </div>
         ))}
       </div>
