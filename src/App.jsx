@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.3";
+const APP_VERSJON = "3.5.4";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -1151,7 +1151,7 @@ function LeggTilHjemskjerm({ stil }) {
 
 function Hjem({ bruker, medlemmer, prosjekter, innslag, dugnader, logo, erAdmin, sisteBackup, gaaTil, stil }) {
   const { C, kort } = stil;
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const aaret = iDag().slice(0, 4);
 
   // Påminnelse om sikkerhetskopi for admin (ikke tatt i dag)
@@ -1435,7 +1435,7 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
   const [varselMottakere, setVarselMottakere] = useState("alle"); // "alle" | "prosjekt"
   const [nettopOpprettetVarsel, setNettopOpprettetVarsel] = useState(null); // dugnad rett etter opprettelse
 
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const idag = iDag();
   const planlagteAlle = dugnader.filter((d) => d.status !== "utfort");
   const utforteAlle = dugnader.filter((d) => d.status === "utfort");
@@ -1798,11 +1798,12 @@ function ProsjektListe({ prosjekter, innslag, medlemmer, bruker, kanOpprette, on
   const [beskrivelse, setBeskrivelse] = useState("");
 
   const timerFor = (pid) => innslag.filter((i) => i.prosjektId === pid).reduce((s, i) => s + i.timer, 0);
-  const lederNavn = (p) => ledereAv(p).map((id) => medlemmer.find((m) => m.id === id)?.navn).filter(Boolean).join(", ");
+  function lederNavn(p) { return ledereAv(p).map((id) => medlemmer.find((m) => m.id === id)?.navn).filter(Boolean).join(", "); }
   const aktive = prosjekter.filter((p) => p.status === "aktiv");
   const fullforte = prosjekter.filter((p) => p.status !== "aktiv");
 
-  const Rad = ({ p }) => (
+  function Rad({ p }) {
+    return (
     <button onClick={() => onAapne(p.id)}
       style={{ ...kort, width: "100%", textAlign: "left", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, borderLeft: `4px solid ${p.status === "aktiv" ? C.sjogronn : C.sand}` }}>
       <div style={{ minWidth: 0 }}>
@@ -1815,8 +1816,8 @@ function ProsjektListe({ prosjekter, innslag, medlemmer, bruker, kanOpprette, on
       </div>
       <span style={{ color: C.sjogronn, fontSize: 20 }}>›</span>
     </button>
-  );
-
+  )
+  }
   return (
     <section style={{ display: "grid", gap: 10 }}>
       {!kanOpprette && (
@@ -1875,7 +1876,7 @@ function ProsjektDetalj({ prosjekt, medlemmer, innslag, bruker, erAdmin, logo, f
   const [nyttNotat, setNyttNotat] = useState("");
   const [visRapport, setVisRapport] = useState(false);
 
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const eier = navnFor(prosjekt.avId);
   const lederIder = ledereAv(prosjekt);
   const lederNavnListe = lederIder.map((id) => medlemmer.find((m) => m.id === id)?.navn).filter(Boolean);
@@ -2326,7 +2327,7 @@ function TimeSkjema({ bruker, medlemmer, prosjekter, aktiviteter, onNyAktivitet,
   const [leggTilId, setLeggTilId] = useState("");
   const [feil, setFeil] = useState("");
 
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
 
   const valgt = prosjekter.find((p) => p.id === prosjektId);
 
@@ -2627,7 +2628,7 @@ function Rapport({ innslag, medlemmer, prosjekter, dugnader, altTilgang, stil })
   const dugnadGrunnlag = altTilgang ? dugnader : dugnader.filter((d) => tillatteIder.includes(d.prosjektId));
 
   const aar = [...new Set([...grunnlag.map((i) => i.dato.slice(0, 4)), ...dugnadGrunnlag.map((d) => d.dato.slice(0, 4))])].sort().reverse();
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
 
   function velgPreset(p) {
     setValgtPreset(p.id);
@@ -3425,7 +3426,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [notat, setNotat] = useState("");
   const [feil, setFeil] = useState("");
 
-  const navnFor = (id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent";
+  function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const idag = iDag();
   const objekter = utleie.objekter || [];
   const bookinger = utleie.bookinger || [];
@@ -3434,7 +3435,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const valgtObjekt = objekter.find((o) => o.id === objektId);
   const kasserer = medlemmer.find((m) => m.id === utleie.kassererId);
 
-  const ikon = (type) => (type === "baat" ? "⛵" : "🏠");
+  function ikon(type) { return (type === "baat" ? "⛵" : "🏠"); }
   const objektNavn = (b) => {
     const o = objekter.find((x) => x.id === b.objektId);
     if (o) return `${ikon(o.type)} ${o.navn}`;
@@ -3512,8 +3513,9 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
         .sort((a, b) => (a.dato + (a.tid || "")).localeCompare(b.dato + (b.tid || "")))
     : [];
 
-  const avtaleLinje = (b) =>
-    `${fUtleiePeriode(b)} — ${b.leietaker}${b.status === "bekreftet" ? " (bekreftet)" : b.status === "gjennomfoert" ? " (gjennomført)" : ""}`;
+  function avtaleLinje(b) {
+    return `${fUtleiePeriode(b)} — ${b.leietaker}${b.status === "bekreftet" ? " (bekreftet)" : b.status === "gjennomfoert" ? " (gjennomført)" : ""}`;
+  }
 
   // ---- Ny eller redigert booking ----
   async function opprett() {
