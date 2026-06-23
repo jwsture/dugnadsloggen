@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.4";
+const APP_VERSJON = "3.5";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -839,7 +839,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
     const numre = [...valgte].map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
     if (numre.length === 0) return;
     const a = document.createElement("a");
-    a.href = `sms:${numre.join(",")}`;
+    a.href = `sms:${numre.join(";")}`;
     a.click();
   }
 
@@ -1026,10 +1026,17 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
             </div>
             {!smsModus && (
               m.telefon ? (
-                <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-                  📞 {m.telefon}
-                </a>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                    📞 {m.telefon}
+                  </a>
+                  <a href={`sms:${m.telefon.replace(/\s+/g, "")}`}
+                    style={{ display: "inline-flex", alignItems: "center", background: C.hav, color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 16, textDecoration: "none" }}
+                    title="Send SMS">
+                    💬
+                  </a>
+                </div>
               ) : (
                 <span style={{ fontSize: 13, color: C.dempet }}>Ingen telefon</span>
               )
@@ -2133,7 +2140,7 @@ ${hendelser.map((h) => `<li>${ikoner[h.type]} <strong>${fDato(h.dato)}:</strong>
                     {b.tekst && <span style={{ color: C.tjaere, fontWeight: 600 }}>{b.tekst}<br /></span>}
                     {fDato(b.dato)} · {b.avNavn}{u ? ` · ${u.navn}` : ""}
                     {(erAdmin || b.avId === bruker.id) && (
-                      <button onClick={() => onSlettFoto(b.nokkel)} style={{ background: "none", border: "none", color: C.signal, cursor: "pointer", fontSize: 12, padding: "0 0 0 6px", textDecoration: "underline" }}>slett</button>
+                      <button onClick={async () => { if (!(await bekreft("Slette dette bildet?"))) return; onSlettFoto(b.nokkel); }} style={{ background: "none", border: "none", color: C.signal, cursor: "pointer", fontSize: 12, padding: "0 0 0 6px", textDecoration: "underline" }}>slett</button>
                     )}
                   </figcaption>
                 </figure>
@@ -3116,7 +3123,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                 if (ny && ny.trim() && ny.trim() !== a) onEndreAktivitet(a, ny);
               }}>Endre navn</button>
               <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
-                onClick={() => onSlettAktivitet(a)}>Fjern</button>
+                onClick={async () => { if (!(await bekreft(`Fjerne aktiviteten «${a}»? Historikken beholdes.`))) return; onSlettAktivitet(a); }}>Fjern</button>
             </div>
           </div>
         ))}
@@ -3335,7 +3342,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
               <span style={{ fontSize: 12, color: C.dempet, marginLeft: 8 }}>{fDato(d.dato)} · {d.paameldte.length} påmeldte</span>
             </div>
             <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
-              onClick={() => onSlettDugnad(d.id)}>
+              onClick={async () => { if (!(await bekreft(`Slette dugnaden «${d.tittel}»?`))) return; onSlettDugnad(d.id); }}>
               Slett
             </button>
           </div>
@@ -3359,7 +3366,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
                   <span style={{ fontSize: 12, color: C.dempet, marginLeft: 8 }}>{p.status}</span>
                 </div>
                 <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
-                  onClick={() => onSlettProsjekt(p.id)}>
+                  onClick={async () => { if (!(await bekreft(`Slette prosjektet «${p.navn}»? Timer beholdes, men mister prosjektkoblingen.`))) return; onSlettProsjekt(p.id); }}>
                   Slett
                 </button>
               </div>
@@ -3664,7 +3671,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
             )}
             {kanRedigere && (
               <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
-                onClick={() => onSlettBooking(b)}>
+                onClick={async () => { if (!(await bekreft(`Slette bookingen for ${b.leietaker || "leietaker"}?`))) return; onSlettBooking(b); }}>
                 Slett
               </button>
             )}
