@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.6";
+const APP_VERSJON = "3.5.7";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -595,6 +595,7 @@ export default function Dugnadsloggen() {
             medlemmer={medlemmer} bruker={bruker} grupper={grupper} prosjekter={prosjekter} innslag={innslag}
             erAdmin={erAdmin}
             onLagreGrupper={lagreGrupper}
+            onLagreMeta={lagreMeta}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
@@ -793,8 +794,8 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAdmin, onLagreGrupper, onLagreEgetTelefon, stil }) {
-  const { C, input, etikett, primKnapp, kort, sekKnapp, bekreft } = stil;
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAdmin, onLagreGrupper, onLagreEgetTelefon, onLagreMeta, stil }) {
+  const { C, input, etikett, primKnapp, kort, sekKnapp, bekreft, sporsmaal, varsle } = stil;
   const [sok, setSok] = useState("");
   const [redigerer, setRedigerer] = useState(false);
   const [nyttTelefon, setNyttTelefon] = useState("");
@@ -804,6 +805,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   const [visGrupper, setVisGrupper] = useState(false);
   const [nyGruppeNavn, setNyGruppeNavn] = useState("");
   const [apenGruppe, setApenGruppe] = useState(null);
+  const [visAdminDel, setVisAdminDel] = useState(false);
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
@@ -1048,6 +1050,57 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
           </div>
         ))}
       </div>
+
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>⚙️ Administrer medlemmer</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Roller og blokkering — kun synlig for admin.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisAdminDel(!visAdminDel)}>
+              {visAdminDel ? "Lukk" : "Åpne"}
+            </button>
+          </div>
+          {visAdminDel && (
+            <div style={{ marginTop: 12 }}>
+              <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.dempet }}>
+                For fullstendig administrasjon (passord, utleierettigheter, prosjektrettigheter) bruk <strong>Admin-fanen</strong>.
+              </p>
+              {[...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb")).map((m) => (
+                <div key={m.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <span style={{ fontWeight: 600 }}>{m.navn}</span>
+                      {m.admin && <span style={{ marginLeft: 6, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px" }}>ADMIN</span>}
+                      {m.blokkert && <span style={{ marginLeft: 6, fontSize: 10.5, background: C.signal, color: "#fff", borderRadius: 4, padding: "2px 6px" }}>BLOKKERT</span>}
+                      <div style={{ fontSize: 12, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"} · {m.telefon || "ingen telefon"}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                      {m.id !== bruker.id && (
+                        <button style={{ ...sekKnapp, padding: "4px 9px", fontSize: 11 }}
+                          onClick={() => onLagreMeta(medlemmer.map((x) => x.id === m.id ? { ...x, admin: !x.admin } : x))}>
+                          {m.admin ? "Fjern admin" : "Gjør til admin"}
+                        </button>
+                      )}
+                      {m.id !== bruker.id && !m.admin && (
+                        <button style={{ ...sekKnapp, padding: "4px 9px", fontSize: 11, borderColor: m.blokkert ? "#4E7E5B" : C.signal, color: m.blokkert ? "#2F5A3C" : C.signal }}
+                          onClick={async () => {
+                            if (!(await bekreft(m.blokkert ? `Gjenåpne tilgangen for ${m.navn}?` : `Blokkere ${m.navn}?`))) return;
+                            onLagreMeta(medlemmer.map((x) => x.id === m.id ? { ...x, blokkert: !x.blokkert } : x));
+                          }}>
+                          {m.blokkert ? "Gjenåpne" : "Blokker"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
     </section>
   );
 }
