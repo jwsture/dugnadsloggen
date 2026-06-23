@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.6.3";
+const APP_VERSJON = "3.6.4";
 const APP_OPPDATERT = "22.06.2026";
 
 const AKT_STANDARD = [
@@ -121,7 +121,7 @@ function lastNedCSV(rader, filnavn) {
 // overalt hvor klokkeslett velges (dugnader, utleie m.m.)
 // ============================================================
 // Statiske arrays utenfor komponenten — Vite hoister disse uansett, bedre å gjøre det eksplisitt
-const TIDVELGER_TIMER = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const TIDVELGER_TIMER = ["00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","23"];
 const TIDVELGER_MIN = ["00", "15", "30", "45"];
 
 function TidVelger({ value, onChange, style }) {
@@ -2497,7 +2497,7 @@ ${hendelser.map((h) => `<li>${ikoner[h.type]} <strong>${fDato(h.dato)}:</strong>
 // ============================================================
 function TimeSkjema({ bruker, medlemmer, prosjekter, aktiviteter, onNyAktivitet, onLagre, stil }) {
   const { C, input, etikett, primKnapp, sekKnapp, kort } = stil;
-  const [dato, setDato] = useState(iDag());
+  const [dato, setDato] = useState(() => iDag());
   const [timer, setTimer] = useState("");
   const [aktivitet, setAktivitet] = useState(aktiviteter[0] || "");
   const [nyAkt, setNyAkt] = useState("");
@@ -3600,8 +3600,8 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [objektId, setObjektId] = useState("");
   const [trengerMannskap, setTrengerMannskap] = useState(true);
   const [mannskapNotat, setMannskapNotat] = useState("");
-  const [dato, setDato] = useState(iDag());
-  const [datoSlutt, setDatoSlutt] = useState(datoPluss(iDag(), 1));
+  const [dato, setDato] = useState(() => iDag());
+  const [datoSlutt, setDatoSlutt] = useState(() => datoPluss(iDag(), 1));
   const [tid, setTid] = useState("12:00");
   const [tidSlutt, setTidSlutt] = useState("12:00");
   const [leietaker, setLeietaker] = useState("");
