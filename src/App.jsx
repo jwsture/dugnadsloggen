@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.5";
+const APP_VERSJON = "3.5.6";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -378,7 +378,7 @@ export default function Dugnadsloggen() {
       } catch (e) { /* bruk det vi allerede har */ }
       const finnesAllerede = naavaerende.find((m) =>
         (m.epost || "").toLowerCase() === epost ||
-        (telefon && m.telefon && m.telefon.replace(/\s+/g, "") === telefon)
+        (sesjonTelefon && m.telefon && m.telefon.replace(/\s+/g, "") === sesjonTelefon)
       );
       if (finnesAllerede) {
         setMedlemmer(naavaerende);
