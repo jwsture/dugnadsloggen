@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.2";
+const APP_VERSJON = "3.5.3";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -170,8 +170,8 @@ export default function Dugnadsloggen() {
   const [prosjekter, setProsjekter] = useState([]);
   const [innslag, setInnslag] = useState([]);
   const [dugnader, setDugnader] = useState([]);
-  const [aktiviteter, setAktiviteter] = useState(AKT_STANDARD);
-  const [utleie, setUtleie] = useState(UTLEIE_STANDARD);
+  const [aktiviteter, setAktiviteter] = useState(() => AKT_STANDARD);
+  const [utleie, setUtleie] = useState(() => UTLEIE_STANDARD);
   const [logo, setLogo] = useState(null);
   const [sisteBackup, setSisteBackup] = useState(null);
   const [grupper, setGrupper] = useState([]);
