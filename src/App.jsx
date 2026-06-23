@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.8";
+const APP_VERSJON = "3.5.9";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -43,6 +43,7 @@ const K_UTLEIE = "akl-utleie";
 const K_BACKUPINFO = "akl-backupinfo";
 const K_GAMMEL = "askoy-kystlag-dugnad";
 const K_GRUPPER = "akl-grupper";
+const K_KONTAKTER = "akl-kontakter";
 const UTLEIE_STANDARD = {
   objekter: [
     { id: "lokale-a", navn: "Lokale 1", type: "lokale" },
@@ -175,6 +176,7 @@ export default function Dugnadsloggen() {
   const [logo, setLogo] = useState(null);
   const [sisteBackup, setSisteBackup] = useState(null);
   const [grupper, setGrupper] = useState([]);
+  const [kontakter, setKontakter] = useState([]);
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
@@ -261,6 +263,10 @@ export default function Dugnadsloggen() {
         const r = await window.storage.get(K_GRUPPER, true);
         if (r?.value) setGrupper(JSON.parse(r.value));
       } catch (e) { /* ingen grupper ennå */ }
+      try {
+        const r = await window.storage.get(K_KONTAKTER, true);
+        if (r?.value) setKontakter(JSON.parse(r.value));
+      } catch (e) { /* ingen kontakter ennå */ }
 
       try {
         const r = await window.storage.get(K_BACKUPINFO, true);
@@ -313,6 +319,7 @@ export default function Dugnadsloggen() {
   const lagreInnslag = lagre(K_INNSLAG, setInnslag, "Kunne ikke lagre timene.");
   const lagreDugnader = lagre(K_DUGNAD, setDugnader, "Kunne ikke lagre dugnaden.");
   const lagreGrupper = lagre(K_GRUPPER, setGrupper, "Kunne ikke lagre grupper.");
+  const lagreKontakter = lagre(K_KONTAKTER, setKontakter, "Kunne ikke lagre kontakter.");
   const lagreAktiviteter = lagre(K_AKT, setAktiviteter, "Kunne ikke lagre aktivitetslisten.");
   const lagreUtleie = lagre(K_UTLEIE, setUtleie, "Kunne ikke lagre utleiedataene.");
 
@@ -593,8 +600,10 @@ export default function Dugnadsloggen() {
         {fane === "medlemmer" && (
           <MedlemsRegister
             medlemmer={medlemmer} bruker={bruker} grupper={grupper} prosjekter={prosjekter} innslag={innslag}
+            kontakter={kontakter}
             erAdmin={erAdmin}
             onLagreGrupper={lagreGrupper}
+            onLagreKontakter={lagreKontakter}
             onLagreMeta={lagreMeta}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
@@ -794,7 +803,7 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAdmin, onLagreGrupper, onLagreEgetTelefon, onLagreMeta, stil }) {
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kontakter, erAdmin, onLagreGrupper, onLagreKontakter, onLagreEgetTelefon, onLagreMeta, stil }) {
   const { C, input, etikett, primKnapp, kort, sekKnapp, bekreft, sporsmaal, varsle } = stil;
   const [sok, setSok] = useState("");
   const [redigerer, setRedigerer] = useState(false);
@@ -808,6 +817,10 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   const [visAdminDel, setVisAdminDel] = useState(false);
   const [visUtskrift, setVisUtskrift] = useState(false);
   const [utskriftGruppe, setUtskriftGruppe] = useState("");
+  const [visKontakter, setVisKontakter] = useState(false);
+  const [nyttKontaktNavn, setNyttKontaktNavn] = useState("");
+  const [nyttKontaktTelefon, setNyttKontaktTelefon] = useState("");
+  const [nyttKontaktEpost, setNyttKontaktEpost] = useState("");
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
@@ -829,7 +842,10 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   function velgGruppe(gruppeId) {
     const g = alleGrupper.find((x) => x.id === gruppeId);
     if (!g) return;
-    const medNummer = g.medlemmer.filter((mid) => medlemmer.find((m) => m.id === mid)?.telefon);
+    const medNummer = g.medlemmer.filter((mid) =>
+      medlemmer.find((m) => m.id === mid)?.telefon ||
+      (kontakter || []).find((k) => k.id === mid)?.telefon
+    );
     setValgte(new Set(medNummer));
   }
 
@@ -837,7 +853,14 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
   function fjernAlle() { setValgte(new Set()); }
 
   function sendSms() {
-    const numre = [...valgte].map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+    const alleKontakter = kontakter || [];
+    const numre = [...valgte]
+      .map((id) => {
+        const m = medlemmer.find((x) => x.id === id);
+        if (m) return m.telefon;
+        return alleKontakter.find((k) => k.id === id)?.telefon;
+      })
+      .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
     if (numre.length === 0) return;
     const a = document.createElement("a");
     a.href = `sms:${numre.join(";")}`;
@@ -1089,6 +1112,51 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, erAd
           </div>
         )}
       </div>
+
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>📋 Eksterne kontakter</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Kun for SMS-grupper — vises ikke i timer, logg eller rapport.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => setVisKontakter(!visKontakter)}>
+              {visKontakter ? "Lukk" : `Administrer (${(kontakter || []).length})`}
+            </button>
+          </div>
+          {visKontakter && (
+            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+              {(kontakter || []).length === 0 && <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>Ingen eksterne kontakter ennå.</p>}
+              {(kontakter || []).map((k) => (
+                <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderBottom: `1px solid ${C.sand}` }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{k.navn}</div>
+                    <div style={{ fontSize: 12.5, color: C.dempet }}>{k.telefon}{k.epost ? ` · ${k.epost}` : ""}</div>
+                  </div>
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
+                    onClick={async () => {
+                      if (!(await bekreft(`Slette kontakten «${k.navn}»?`))) return;
+                      onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
+                    }}>Slett</button>
+                </div>
+              ))}
+              <div style={{ display: "grid", gap: 8, marginTop: 4, background: C.kritt, borderRadius: 8, padding: 12 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>Legg til ekstern kontakt</div>
+                <input style={input} value={nyttKontaktNavn} onChange={(e) => setNyttKontaktNavn(e.target.value)} placeholder="Navn" />
+                <input type="tel" style={input} value={nyttKontaktTelefon} onChange={(e) => setNyttKontaktTelefon(e.target.value)} placeholder="Telefonnummer" />
+                <input type="email" style={input} value={nyttKontaktEpost} onChange={(e) => setNyttKontaktEpost(e.target.value)} placeholder="E-post (valgfritt)" />
+                <button style={{ ...primKnapp, padding: "8px 16px" }} onClick={() => {
+                  const n = nyttKontaktNavn.trim();
+                  const t = nyttKontaktTelefon.trim();
+                  if (n.length < 2 || !t) return;
+                  onLagreKontakter([...(kontakter || []), { id: nyId(), navn: n, telefon: t, epost: nyttKontaktEpost.trim().toLowerCase(), ekstern: true }]);
+                  setNyttKontaktNavn(""); setNyttKontaktTelefon(""); setNyttKontaktEpost("");
+                }}>Legg til kontakt</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {erAdmin && (
         <div style={kort}>
