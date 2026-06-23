@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.1";
+const APP_VERSJON = "3.5.2";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -2605,16 +2605,15 @@ function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, stil }
 // Rapport
 // ============================================================
 
-const FORHAANDSVALG = [
+function Rapport({ innslag, medlemmer, prosjekter, dugnader, altTilgang, stil }) {
+  const FORHAANDSVALG = [
     { id: "topp", navn: "Topp medlemmer", gruppe: "medlem", topp: "10", visning: "stolper" },
     { id: "mnd", navn: "Timer per måned", gruppe: "maaned", topp: "alle", visning: "stolper" },
     { id: "prosjekt", navn: "Timer per prosjekt", gruppe: "prosjekt", topp: "alle", visning: "stolper" },
     { id: "aktivitet", navn: "Timer per aktivitet", gruppe: "aktivitet", topp: "alle", visning: "tabell" },
     { id: "oppmoete", navn: "Dugnadsoppmøte", gruppe: "oppmoete", topp: "alle", visning: "stolper" },
   ];
-
-function Rapport({ innslag, medlemmer, prosjekter, dugnader, altTilgang, stil }) {
-    const { C, input, etikett, sekKnapp, kort } = stil;
+  const { C, input, etikett, sekKnapp, kort } = stil;
   const [valgtPreset, setValgtPreset] = useState("topp");
   const [gruppe, setGruppe] = useState("medlem");
   const [fAar, setFAar] = useState("alle");
