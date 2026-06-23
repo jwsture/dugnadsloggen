@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.4";
+const APP_VERSJON = "3.5.5";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -349,13 +349,12 @@ export default function Dugnadsloggen() {
   // slik at to personer som registrerer seg samtidig ikke overskriver hverandre.
   useEffect(() => {
     if (laster || !session?.user?.email || bruker) return;
-    const epost = session.user.email.toLowerCase();
-    const telefon = (session.user.user_metadata?.telefon || "").replace(/\s+/g, "");
+    const sesjonEpost = session.user.email.toLowerCase();
+    const sesjonTelefon = (session.user.user_metadata?.telefon || "").replace(/\s+/g, "");
 
-    // Match på e-post ELLER telefonnummer (telefon er nytt – støtter admin-opprettede profiler)
     const funnet = medlemmer.find((m) =>
-      (m.epost || "").toLowerCase() === epost ||
-      (telefon && m.telefon && m.telefon.replace(/\s+/g, "") === telefon)
+      (m.epost || "").toLowerCase() === sesjonEpost ||
+      (sesjonTelefon && m.telefon && m.telefon.replace(/\s+/g, "") === sesjonTelefon)
     );
     if (funnet) {
       if (funnet.blokkert) {
@@ -363,15 +362,15 @@ export default function Dugnadsloggen() {
         setFeil("Denne brukeren er blokkert av en administrator. Ta kontakt med laget hvis du tror dette er en feil.");
         return;
       }
-      // Oppdater e-post på profilen hvis den var opprettet av admin uten e-post
-      if (!funnet.epost && epost) {
-        lagreMeta(medlemmer.map((m) => (m.id === funnet.id ? { ...m, epost } : m)));
+      if (!funnet.epost && sesjonEpost) {
+        lagreMeta(medlemmer.map((m) => (m.id === funnet.id ? { ...m, epost: sesjonEpost } : m)));
       }
       setBruker({ id: funnet.id, navn: funnet.navn });
       return;
     }
     // Første gang denne e-posten logger inn: hent ferskeste liste og legg til medlemmet trygt
     (async () => {
+      const epost = sesjonEpost;
       let naavaerende = medlemmer;
       try {
         const r = await window.storage.get(K_META, true);
@@ -396,8 +395,8 @@ export default function Dugnadsloggen() {
         return;
       }
       const navn = session.user.user_metadata?.navn?.trim() || epost.split("@")[0];
-      const telefon = session.user.user_metadata?.telefon?.trim() || "";
-      const ny = { id: nyId(), navn, epost, telefon, pin: "", admin: naavaerende.length === 0 };
+      const nyTelefon = session.user.user_metadata?.telefon?.trim() || "";
+      const ny = { id: nyId(), navn, epost, telefon: nyTelefon, pin: "", admin: naavaerende.length === 0 };
       await lagreMeta([...naavaerende, ny]);
       setBruker({ id: ny.id, navn: ny.navn });
     })();
