@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.13";
+const APP_VERSJON = "3.5.14";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -821,6 +821,10 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
   const [nyttKontaktNavn, setNyttKontaktNavn] = useState("");
   const [nyttKontaktTelefon, setNyttKontaktTelefon] = useState("");
   const [nyttKontaktEpost, setNyttKontaktEpost] = useState("");
+  const [visImport, setVisImport] = useState(false);
+  const [importTekst, setImportTekst] = useState("");
+  const [importGruppe, setImportGruppe] = useState("");
+  const [importResultat, setImportResultat] = useState(null);
 
   const sortert = [...medlemmer].sort((a, b) => a.navn.localeCompare(b.navn, "nb"));
   const filtrert = sortert.filter((m) => m.navn.toLowerCase().includes(sok.toLowerCase()));
@@ -1200,6 +1204,103 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                   setNyttKontaktNavn(""); setNyttKontaktTelefon(""); setNyttKontaktEpost("");
                 }}>Legg til kontakt</button>
               </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {erAdmin && (
+        <div style={kort}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 16 }}>📥 Importer kontakter</h3>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.dempet }}>Lim inn en liste med navn og telefon – én per linje.</p>
+            </div>
+            <button style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => { setVisImport(!visImport); setImportResultat(null); }}>
+              {visImport ? "Lukk" : "Importer"}
+            </button>
+          </div>
+          {visImport && (
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              <div style={{ background: "#EAF0F5", borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Format (én kontakt per linje):</div>
+                <div style={{ fontFamily: "monospace", lineHeight: 1.8, color: C.tjaere }}>
+                  <div>Navn, telefonnummer</div>
+                  <div>Navn; telefonnummer</div>
+                  <div>Navn telefonnummer</div>
+                </div>
+                <div style={{ marginTop: 6, color: C.dempet }}>
+                  Eksempel:<br />
+                  <span style={{ fontFamily: "monospace" }}>
+                    Kari Olsvik, 91234567<br />
+                    Per Hansen; 98765432<br />
+                    Anne Vik 41234567
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label style={etikett}>Lim inn liste</label>
+                <textarea style={{ ...input, minHeight: 120, resize: "vertical", fontFamily: "monospace", fontSize: 13 }}
+                  value={importTekst} onChange={(e) => { setImportTekst(e.target.value); setImportResultat(null); }}
+                  placeholder={"Kari Olsvik, 91234567\nPer Hansen, 98765432\nAnne Vik, 41234567"} />
+              </div>
+              <div>
+                <label style={etikett}>Legg til i gruppe (valgfritt)</label>
+                <select style={input} value={importGruppe} onChange={(e) => setImportGruppe(e.target.value)}>
+                  <option value="">Ikke legg til i gruppe</option>
+                  {(grupper || []).map((g) => <option key={g.id} value={g.id}>{g.navn}</option>)}
+                </select>
+              </div>
+              <button style={{ ...primKnapp, padding: "9px 16px" }} onClick={() => {
+                const linjer = importTekst.split("\n").map((l) => l.trim()).filter((l) => l.length > 2);
+                const nye = [];
+                const feilet = [];
+                for (const linje of linjer) {
+                  // Prøv å parse: splitt på komma, semikolon eller siste mellomrom
+                  let navn = "", telefon = "";
+                  if (linje.includes(",")) {
+                    const deler = linje.split(",").map((d) => d.trim());
+                    navn = deler[0]; telefon = deler[1] || "";
+                  } else if (linje.includes(";")) {
+                    const deler = linje.split(";").map((d) => d.trim());
+                    navn = deler[0]; telefon = deler[1] || "";
+                  } else {
+                    // Siste "ord" er telefonnummer (bare siffer/+)
+                    const deler = linje.split(" ");
+                    telefon = deler[deler.length - 1];
+                    navn = deler.slice(0, -1).join(" ");
+                  }
+                  telefon = telefon.replace(/\s+/g, "");
+                  if (navn.length >= 2 && /^[\d+]{8,}$/.test(telefon)) {
+                    nye.push({ id: nyId(), navn: navn.trim(), telefon, epost: "", ekstern: true });
+                  } else {
+                    feilet.push(linje);
+                  }
+                }
+                if (nye.length === 0) { setImportResultat({ ok: 0, feil: feilet }); return; }
+                const oppdaterteKontakter = [...(kontakter || []), ...nye];
+                onLagreKontakter(oppdaterteKontakter);
+                if (importGruppe) {
+                  const g = (grupper || []).find((x) => x.id === importGruppe);
+                  if (g) {
+                    const nyeIder = nye.map((k) => k.id);
+                    onLagreGrupper((grupper || []).map((x) => x.id === importGruppe ? { ...x, medlemmer: [...x.medlemmer, ...nyeIder] } : x));
+                  }
+                }
+                setImportResultat({ ok: nye.length, feil: feilet });
+                setImportTekst("");
+              }}>Importer kontakter</button>
+              {importResultat && (
+                <div style={{ background: importResultat.ok > 0 ? "#EAF3EC" : "#FBEAE8", borderRadius: 8, padding: "10px 12px", fontSize: 13 }}>
+                  {importResultat.ok > 0 && <div style={{ color: "#2F5A3C", fontWeight: 700 }}>✓ {importResultat.ok} kontakt{importResultat.ok === 1 ? "" : "er"} importert{importGruppe ? " og lagt til i gruppen" : ""}.</div>}
+                  {importResultat.feil.length > 0 && (
+                    <div style={{ color: C.signal, marginTop: importResultat.ok > 0 ? 6 : 0 }}>
+                      <div style={{ fontWeight: 700 }}>Kunne ikke tolke {importResultat.feil.length} linje{importResultat.feil.length === 1 ? "" : "r"}:</div>
+                      {importResultat.feil.map((f, i) => <div key={i} style={{ fontFamily: "monospace", fontSize: 12 }}>{f}</div>)}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
