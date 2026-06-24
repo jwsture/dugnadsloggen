@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.20";
+const APP_VERSJON = "3.5.21";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -3781,6 +3781,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [pris, setPris] = useState("");
   const [notat, setNotat] = useState("");
   const [fakturaStatus, setFakturaStatus] = useState("ikke-sendt");
+  const [fakturaNotat, setFakturaNotat] = useState("");
   const [feil, setFeil] = useState("");
 
   function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
@@ -3807,6 +3808,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   function tomSkjema() {
     setObjektId(""); setDato(iDag()); setDatoSlutt(datoPluss(iDag(), 1)); setTid("12:00"); setTidSlutt("12:00"); setLeietaker(""); setKontakt(""); setPris(""); setNotat(""); setMannskapNotat("");
     setFakturaStatus("ikke-sendt");
+    setFakturaNotat("");
     setRedigerId(null); setViserSkjema(false); setFeil("");
   }
 
@@ -3817,6 +3819,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
     setLeietaker(b.leietaker || ""); setKontakt(b.kontakt || "");
     setPris(b.pris || ""); setNotat(b.notat || "");
     setFakturaStatus(b.fakturaStatus || "ikke-sendt");
+    setFakturaNotat(b.fakturaNotat || "");
     setTrengerMannskap(false); setMannskapNotat("");
     setFeil(""); setViserSkjema(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3906,6 +3909,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
         leietaker: leietaker.trim(), kontakt: kontakt.trim(),
         pris: pris.trim(), notat: notat.trim(),
         fakturaStatus,
+        fakturaNotat: fakturaNotat.trim(),
       };
       let nyDugnad = null;
       if (!original.dugnadId && trengerMannskap) {
@@ -3926,6 +3930,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
       leietaker: leietaker.trim(), kontakt: kontakt.trim(),
       pris: pris.trim(), notat: notat.trim(),
       fakturaStatus,
+      fakturaNotat: fakturaNotat.trim(),
       status: "forespurt",
       opprettetAv: bruker.id,
       dugnadId: null,
@@ -4013,6 +4018,9 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
                 </span>
               )}
             </div>
+            {(erAdmin || bruker.id === utleie.kassererId) && b.fakturaNotat && (
+              <div style={{ fontSize: 13, color: C.hav, marginTop: 3 }}>🧾 {b.fakturaNotat}</div>
+            )}
             {b.notat && <div style={{ fontSize: 13, marginTop: 4 }}>{b.notat}</div>}
             {konflikt && (
               <div style={{ fontSize: 12.5, color: C.signal, fontWeight: 600, marginTop: 4 }}>
@@ -4277,13 +4285,21 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
             </div>
           </div>
           {(erAdmin || bruker.id === utleie.kassererId) && (
-            <div>
-              <label style={etikett}>Fakturastatus</label>
-              <select style={input} value={fakturaStatus} onChange={(e) => setFakturaStatus(e.target.value)}>
-                <option value="ikke-sendt">📄 Ikke sendt</option>
-                <option value="sendt">📬 Sendt</option>
-                <option value="betalt">✅ Betalt</option>
-              </select>
+            <div style={{ display: "grid", gap: 10, background: "#EAF0F5", borderRadius: 8, padding: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>🧾 Fakturainformasjon</div>
+              <div>
+                <label style={etikett}>Fakturastatus</label>
+                <select style={input} value={fakturaStatus} onChange={(e) => setFakturaStatus(e.target.value)}>
+                  <option value="ikke-sendt">📄 Ikke sendt</option>
+                  <option value="sendt">📬 Sendt</option>
+                  <option value="betalt">✅ Betalt</option>
+                </select>
+              </div>
+              <div>
+                <label style={etikett}>Fakturamerknad (valgfritt)</label>
+                <input style={input} value={fakturaNotat} onChange={(e) => setFakturaNotat(e.target.value)}
+                  placeholder="f.eks. Sommeravslutning Aker Solutions, Prosjekt 2024-112 …" />
+              </div>
             </div>
           )}
           <div>
