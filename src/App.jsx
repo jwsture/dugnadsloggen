@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.28";
+const APP_VERSJON = "3.5.29";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -533,6 +533,7 @@ export default function Dugnadsloggen() {
         )}
 
         {fane === "timer" && (
+          <>
           <TimeSkjema
             bruker={bruker} medlemmer={medlemmer} prosjekter={prosjekter} aktiviteter={aktiviteter}
             onNyAktivitet={nyAktivitet}
@@ -569,6 +570,7 @@ export default function Dugnadsloggen() {
             }}
             stil={stil}
           />
+          </>
         )}
 
         {fane === "kalender" && (
