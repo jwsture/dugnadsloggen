@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.27";
+const APP_VERSJON = "3.5.28";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -558,6 +558,17 @@ export default function Dugnadsloggen() {
             }}
             stil={stil}
           />
+          <MineRegistreringer
+            innslag={innslag} bruker={bruker} prosjekter={prosjekter} medlemmer={medlemmer}
+            onSlett={async (id) => {
+              if (!(await bekreft("Slette denne registreringen?"))) return;
+              await lagreInnslag(innslag.filter((i) => i.id !== id));
+            }}
+            onEndre={async (oppdatert) => {
+              await lagreInnslag(innslag.map((i) => i.id === oppdatert.id ? oppdatert : i));
+            }}
+            stil={stil}
+          />
         )}
 
         {fane === "kalender" && (
@@ -633,6 +644,9 @@ export default function Dugnadsloggen() {
             onSlett={async (id) => {
               if (!(await bekreft("Slette denne registreringen?"))) return;
               await lagreInnslag(innslag.filter((i) => i.id !== id));
+            }}
+            onEndre={async (oppdatert) => {
+              await lagreInnslag(innslag.map((i) => i.id === oppdatert.id ? oppdatert : i));
             }}
             stil={stil}
           />
@@ -2691,6 +2705,97 @@ ${hendelser.map((h) => `<li>${ikoner[h.type]} <strong>${fDato(h.dato)}:</strong>
 // ============================================================
 // Føring av timer
 // ============================================================
+function MineRegistreringer({ innslag, bruker, prosjekter, medlemmer, onSlett, onEndre, stil }) {
+  const { C, input, etikett, primKnapp, sekKnapp, kort } = stil;
+  const [redigerId, setRedigerId] = useState(null);
+  const [endreTimer, setEndreTimer] = useState("");
+  const [endreDato, setEndreDato] = useState("");
+  const [endreAktivitet, setEndreAktivitet] = useState("");
+  const [endreNotat, setEndreNotat] = useState("");
+
+  const mine = [...innslag]
+    .filter((i) => i.medlemId === bruker.id)
+    .sort((a, b) => b.dato.localeCompare(a.dato))
+    .slice(0, 10); // vis siste 10
+
+  if (mine.length === 0) return null;
+
+  function startEndre(i) {
+    setRedigerId(i.id);
+    setEndreTimer(String(i.timer));
+    setEndreDato(i.dato);
+    setEndreAktivitet(i.aktivitet);
+    setEndreNotat(i.notat || "");
+  }
+
+  async function lagreEndring(i) {
+    const timer = parseFloat(String(endreTimer).replace(",", "."));
+    if (isNaN(timer) || timer <= 0) return;
+    await onEndre({ ...i, timer, dato: endreDato, aktivitet: endreAktivitet, notat: endreNotat });
+    setRedigerId(null);
+  }
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <h3 style={{ fontFamily: "Georgia, serif", fontSize: 16, margin: "0 0 10px" }}>Mine siste registreringer</h3>
+      <div style={{ display: "grid", gap: 8 }}>
+        {mine.map((i) => {
+          const p = prosjekter.find((x) => x.id === i.prosjektId);
+          const u = p?.under?.find((x) => x.id === i.underId);
+          return (
+            <div key={i.id} style={{ background: "#fff", border: `1px solid ${C.sand}`, borderLeft: `4px solid ${C.sjogronn}`, borderRadius: 8, padding: "11px 14px" }}>
+              {redigerId === i.id ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>Endre registrering</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <div>
+                      <label style={etikett}>Timer</label>
+                      <input style={input} value={endreTimer} onChange={(e) => setEndreTimer(e.target.value)} placeholder="f.eks. 3.5" />
+                    </div>
+                    <div>
+                      <label style={etikett}>Dato</label>
+                      <input type="date" style={input} value={endreDato} onChange={(e) => setEndreDato(e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={etikett}>Aktivitet</label>
+                    <input style={input} value={endreAktivitet} onChange={(e) => setEndreAktivitet(e.target.value)} />
+                  </div>
+                  <div>
+                    <label style={etikett}>Notat</label>
+                    <input style={input} value={endreNotat} onChange={(e) => setEndreNotat(e.target.value)} placeholder="Valgfritt notat" />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...primKnapp, padding: "7px 16px", fontSize: 13 }} onClick={() => lagreEndring(i)}>Lagre</button>
+                    <button style={{ ...sekKnapp, padding: "7px 16px", fontSize: 13 }} onClick={() => setRedigerId(null)}>Avbryt</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{String(i.timer).replace(".", ",")} t</div>
+                    <div style={{ fontSize: 13, color: C.dempet }}>
+                      {fDato(i.dato)} · {i.aktivitet}
+                      {p ? ` · ${p.navn}${u ? ` / ${u.navn}` : ""}` : ""}
+                      {i.notat ? ` · ${i.notat}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+                    <button onClick={() => startEndre(i)}
+                      style={{ background: "none", border: "none", color: C.dempet, cursor: "pointer", fontSize: 15, padding: 4 }}>✏️</button>
+                    <button onClick={() => onSlett(i.id)}
+                      style={{ background: "none", border: "none", color: C.dempet, cursor: "pointer", fontSize: 18, padding: 4 }}>×</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TimeSkjema({ bruker, medlemmer, prosjekter, aktiviteter, onNyAktivitet, onLagre, stil }) {
   const { C, input, etikett, primKnapp, sekKnapp, kort } = stil;
   const [dato, setDato] = useState(() => iDag());
@@ -2908,10 +3013,34 @@ function InnslagBilder({ innslag, C }) {
 // ============================================================
 // Logg
 // ============================================================
-function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, stil }) {
-  const { C, input, sekKnapp } = stil;
+function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, onEndre, stil }) {
+  const { C, input, etikett, sekKnapp, primKnapp, kort, bekreft } = stil;
   const [fMedlem, setFMedlem] = useState("alle");
   const [fAar, setFAar] = useState("alle");
+  const [redigererEtikett, setRedigererEtikett] = useState(null); // innslag-id
+  const [endreTimer, setEndreTimer] = useState("");
+  const [endreDato, setEndreDato] = useState("");
+  const [endreAktivitet, setEndreAktivitet] = useState("");
+  const [endreNotat, setEndreNotat] = useState("");
+
+  function startEndre(i) {
+    setRedigererEtikett(i.id);
+    setEndreTimer(String(i.timer));
+    setEndreDato(i.dato);
+    setEndreAktivitet(i.aktivitet);
+    setEndreNotat(i.notat || "");
+  }
+
+  function avbrytEndre() {
+    setRedigererEtikett(null);
+  }
+
+  async function lagreEndring(i) {
+    const timer = parseFloat(String(endreTimer).replace(",", "."));
+    if (isNaN(timer) || timer <= 0) return;
+    await onEndre({ ...i, timer, dato: endreDato, aktivitet: endreAktivitet, notat: endreNotat });
+    setRedigererEtikett(null);
+  }
 
   const aar = [...new Set(innslag.map((i) => i.dato.slice(0, 4)))].sort().reverse();
   const filtrert = innslag.filter((i) =>
@@ -2956,19 +3085,58 @@ function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, stil }
             const p = prosjekter.find((x) => x.id === i.prosjektId);
             const u = p?.under?.find((x) => x.id === i.underId);
             return (
-              <div key={i.id} style={{ background: "#fff", border: `1px solid ${C.sand}`, borderLeft: `4px solid ${C.sjogronn}`, borderRadius: 8, padding: "11px 14px", display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{navn} — {String(i.timer).replace(".", ",")} t</div>
-                  <div style={{ fontSize: 13, color: C.dempet }}>
-                    {fDato(i.dato)} · {i.aktivitet}
-                    {p ? ` · ${p.navn}${u ? ` / ${u.navn}` : ""}` : ""}
-                    {i.notat ? ` · ${i.notat}` : ""}
+              <div key={i.id} style={{ background: "#fff", border: `1px solid ${C.sand}`, borderLeft: `4px solid ${C.sjogronn}`, borderRadius: 8, padding: "11px 14px" }}>
+                {redigererEtikett === i.id ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>Endre registrering for {navn}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div>
+                        <label style={etikett}>Timer</label>
+                        <input style={input} value={endreTimer} onChange={(e) => setEndreTimer(e.target.value)} placeholder="f.eks. 3.5" />
+                      </div>
+                      <div>
+                        <label style={etikett}>Dato</label>
+                        <input type="date" style={input} value={endreDato} onChange={(e) => setEndreDato(e.target.value)} />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={etikett}>Aktivitet</label>
+                      <input style={input} value={endreAktivitet} onChange={(e) => setEndreAktivitet(e.target.value)} />
+                    </div>
+                    <div>
+                      <label style={etikett}>Notat</label>
+                      <input style={input} value={endreNotat} onChange={(e) => setEndreNotat(e.target.value)} placeholder="Valgfritt notat" />
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button style={{ ...primKnapp, padding: "7px 16px", fontSize: 13 }} onClick={() => lagreEndring(i)}>Lagre</button>
+                      <button style={{ ...sekKnapp, padding: "7px 16px", fontSize: 13 }} onClick={avbrytEndre}>Avbryt</button>
+                    </div>
                   </div>
-                  {i.antallBilder > 0 && <InnslagBilder innslag={i} C={C} />}
-                </div>
-                {(erAdmin || i.medlemId === bruker.id) && (
-                  <button onClick={() => onSlett(i.id)} aria-label="Slett registrering"
-                    style={{ background: "none", border: "none", color: C.dempet, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+                ) : (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{navn} — {String(i.timer).replace(".", ",")} t</div>
+                      <div style={{ fontSize: 13, color: C.dempet }}>
+                        {fDato(i.dato)} · {i.aktivitet}
+                        {p ? ` · ${p.navn}${u ? ` / ${u.navn}` : ""}` : ""}
+                        {i.notat ? ` · ${i.notat}` : ""}
+                      </div>
+                      {i.antallBilder > 0 && <InnslagBilder innslag={i} C={C} />}
+                    </div>
+                    <div style={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+                      {(erAdmin || i.medlemId === bruker.id) && (
+                        <button onClick={() => startEndre(i)} aria-label="Endre registrering"
+                          style={{ background: "none", border: "none", color: C.dempet, cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 4 }}>✏️</button>
+                      )}
+                      {(erAdmin || i.medlemId === bruker.id) && (
+                        <button onClick={async () => {
+                          if (!(await bekreft("Slette denne registreringen?"))) return;
+                          onSlett(i.id);
+                        }} aria-label="Slett registrering"
+                          style={{ background: "none", border: "none", color: C.dempet, cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 4 }}>×</button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
             );
