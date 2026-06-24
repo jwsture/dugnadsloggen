@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.15";
+const APP_VERSJON = "3.5.17";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -489,7 +489,7 @@ export default function Dugnadsloggen() {
 
   return (
     <div style={{ minHeight: "100vh", background: C.kritt, fontFamily: "'Helvetica Neue', Arial, sans-serif", color: C.tjaere }}>
-      <header style={{ background: C.hav, color: C.kritt, padding: "16px 12px 0" }}>
+      <header style={{ background: C.hav, color: C.kritt, padding: "env(safe-area-inset-top, 16px) 12px 0", paddingTop: "max(16px, env(safe-area-inset-top))" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -1218,22 +1218,20 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
             <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
               {(kontakter || []).length === 0 && <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>Ingen eksterne kontakter ennå.</p>}
               {(kontakter || []).map((k) => (
-                <div key={k.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0", borderBottom: `1px solid ${C.sand}` }}>
+                <div key={k.id} style={{ display: "grid", gap: 6, padding: "10px 0", borderBottom: `1px solid ${C.sand}` }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{k.navn}</div>
                     <div style={{ fontSize: 12.5, color: C.dempet }}>{k.telefon}{k.epost ? ` · ${k.epost}` : ""}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: "#4E7E5B", color: "#2F5A3C" }}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: "#4E7E5B", color: "#2F5A3C" }}
                       onClick={async () => {
                         if (!(await bekreft(`Gjøre ${k.navn} til fullverdig medlem?\n\nDe vil da dukke opp i dugnadslister, timer og rapporter. Kontakten fjernes fra ekstern-listen.`))) return;
-                        // Legg til som vanlig medlem
                         const nyttMedlem = { id: k.id, navn: k.navn, telefon: k.telefon, epost: k.epost || "", pin: "", admin: false };
                         onLagreMeta([...medlemmer, nyttMedlem]);
-                        // Fjern fra ekstern-listen
                         onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
                       }}>👤 Gjør til medlem</button>
-                    <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
+                    <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
                       onClick={async () => {
                         if (!(await bekreft(`Slette kontakten «${k.navn}»?`))) return;
                         onLagreKontakter((kontakter || []).filter((x) => x.id !== k.id));
