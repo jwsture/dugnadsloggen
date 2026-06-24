@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.26";
+const APP_VERSJON = "3.5.27";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -4053,12 +4053,14 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
             )}
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {kanRedigere && (
+              <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }}
+                onClick={() => startRedigering(b)}>
+                Endre
+              </button>
+            )}
             {kanRedigere && !gjennomfoert && (
               <>
-                <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }}
-                  onClick={() => startRedigering(b)}>
-                  Endre
-                </button>
                 <button style={{ ...sekKnapp, padding: "5px 10px", fontSize: 12 }}
                   onClick={() => onOppdaterBooking({ ...b, status: bekreftet ? "forespurt" : "bekreftet" })}>
                   {bekreftet ? "Sett som forespørsel" : "Bekreft"}
