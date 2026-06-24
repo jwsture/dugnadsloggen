@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.21";
+const APP_VERSJON = "3.5.22";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -1020,6 +1020,18 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                         }}>
                         💬 Send SMS{g.medlemmer.length > 0 ? ` (${g.medlemmer.length})` : ""}
                       </button>
+                      <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12 }}
+                        title="Kopier numre – bruk denne på iPhone hvis SMS-appen bare åpner med én mottaker"
+                        onClick={async () => {
+                          const numre = g.medlemmer.map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+                          if (numre.length === 0) { await varsle("Ingen numre å kopiere."); return; }
+                          try {
+                            await navigator.clipboard.writeText(numre.join("; "));
+                            await varsle(`${numre.length} numre kopiert! Lim dem inn i mottaker-feltet i SMS-appen din.`);
+                          } catch (e) {
+                            await varsle(`Kopier disse numrene manuelt:\n\n${numre.join("; ")}`);
+                          }
+                        }}>📋 Kopier</button>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
                         onClick={async () => {
                           if (!(await bekreft(`Slette gruppen «${g.navn}»?`))) return;
