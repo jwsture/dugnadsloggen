@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.23";
+const APP_VERSJON = "3.5.26";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -934,11 +934,18 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
           </div>
           {valgte.size > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={{ ...primKnapp, flex: 1 }} onClick={sendSms}>
-                💬 Åpne i SMS-appen ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
+              <button style={{ ...primKnapp, flex: 1 }} onClick={async () => {
+                const erIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+                if (erIOS && valgte.size > 1) {
+                  await varsle(`📱 iPhone-tips:\n\niPhone støtter ikke å sende til flere på én gang via denne knappen.\n\nBruk «📋 Kopier»-knappen ved siden av, og lim numrene inn i «Til:»-feltet i iMessage.`);
+                  return;
+                }
+                sendSms();
+              }}>
+                💬 Send SMS ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
               </button>
               <button style={{ ...sekKnapp, padding: "9px 14px", fontSize: 14 }}
-                title="Bruk denne på iPhone hvis SMS-appen bare åpner med én mottaker"
+                title="iPhone: kopier og lim inn i Til:-feltet i iMessage"
                 onClick={async () => {
                   const alleKontakter = kontakter || [];
                   const numre = [...valgte]
@@ -950,12 +957,12 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                     .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
                   try {
                     await navigator.clipboard.writeText(numre.join(","));
-                    await varsle(`${numre.length} nummer kopiert!\n\nLim dem inn i mottaker-feltet i SMS-appen din (fungerer best på iPhone).`);
+                    await varsle(`${numre.length} numre kopiert!\n\nLim dem inn i «Til:»-feltet i iMessage, trykk mellomrom etter siste nummer, skriv deretter meldingen.`);
                   } catch (e) {
-                    await varsle(`Numre (kopier manuelt):\n\n${numre.join(",")}`);
+                    await varsle(`Kopier disse numrene manuelt:\n\n${numre.join(",")}`);
                   }
                 }}>
-                📋 Kopier numre
+                📋 Kopier
               </button>
             </div>
           )}
@@ -1014,6 +1021,11 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                           const numre = g.medlemmer.map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
                           if (numre.length === 0) {
                             await varsle("Ingen i denne gruppen har telefonnummer. Gruppen kan inneholde gamle medlems-IDer — åpne «Velg medlemmer» og huk av på nytt.");
+                            return;
+                          }
+                          const erIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+                          if (erIOS && numre.length > 1) {
+                            await varsle(`📱 iPhone-tips:\n\niPhone støtter ikke å sende til flere på én gang via denne knappen.\n\nBruk «📋 Kopier»-knappen i stedet, og lim numrene inn i «Til:»-feltet i iMessage.`);
                             return;
                           }
                           const a = document.createElement("a"); a.href = `sms:${numre.join(",")}`;  a.click();
