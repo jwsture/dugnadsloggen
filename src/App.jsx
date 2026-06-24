@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.19";
+const APP_VERSJON = "3.5.20";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -3781,6 +3781,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [pris, setPris] = useState("");
   const [notat, setNotat] = useState("");
   const [fakturaStatus, setFakturaStatus] = useState("ikke-sendt");
+  const [feil, setFeil] = useState("");
 
   function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const idag = iDag();
