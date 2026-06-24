@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.22";
+const APP_VERSJON = "3.5.23";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -885,7 +885,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
       .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
     if (numre.length === 0) return;
     const a = document.createElement("a");
-    a.href = `sms:${numre.join(";")}`;
+    a.href = `sms:${numre.join(",")}`;
     a.click();
   }
 
@@ -949,10 +949,10 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                     })
                     .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
                   try {
-                    await navigator.clipboard.writeText(numre.join("; "));
+                    await navigator.clipboard.writeText(numre.join(","));
                     await varsle(`${numre.length} nummer kopiert!\n\nLim dem inn i mottaker-feltet i SMS-appen din (fungerer best på iPhone).`);
                   } catch (e) {
-                    await varsle(`Numre (kopier manuelt):\n\n${numre.join("; ")}`);
+                    await varsle(`Numre (kopier manuelt):\n\n${numre.join(",")}`);
                   }
                 }}>
                 📋 Kopier numre
@@ -1016,7 +1016,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                             await varsle("Ingen i denne gruppen har telefonnummer. Gruppen kan inneholde gamle medlems-IDer — åpne «Velg medlemmer» og huk av på nytt.");
                             return;
                           }
-                          const a = document.createElement("a"); a.href = `sms:${numre.join(";")}`;  a.click();
+                          const a = document.createElement("a"); a.href = `sms:${numre.join(",")}`;  a.click();
                         }}>
                         💬 Send SMS{g.medlemmer.length > 0 ? ` (${g.medlemmer.length})` : ""}
                       </button>
@@ -1026,10 +1026,10 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                           const numre = g.medlemmer.map((id) => medlemmer.find((m) => m.id === id)?.telefon).filter(Boolean).map((t) => t.replace(/\s+/g, ""));
                           if (numre.length === 0) { await varsle("Ingen numre å kopiere."); return; }
                           try {
-                            await navigator.clipboard.writeText(numre.join("; "));
+                            await navigator.clipboard.writeText(numre.join(","));
                             await varsle(`${numre.length} numre kopiert! Lim dem inn i mottaker-feltet i SMS-appen din.`);
                           } catch (e) {
-                            await varsle(`Kopier disse numrene manuelt:\n\n${numre.join("; ")}`);
+                            await varsle(`Kopier disse numrene manuelt:\n\n${numre.join(",")}`);
                           }
                         }}>📋 Kopier</button>
                       <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: C.signal, color: C.signal }}
