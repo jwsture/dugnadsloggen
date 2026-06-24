@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.17";
+const APP_VERSJON = "3.5.18";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -650,6 +650,7 @@ export default function Dugnadsloggen() {
         {fane === "utleie" && serUtleie && (
           <Utleie
             kanRedigere={kanUtleie}
+            erAdmin={erAdmin}
             utleie={utleie} dugnader={dugnader} medlemmer={medlemmer} prosjekter={prosjekter} bruker={bruker}
             onLagreUtleie={lagreUtleie}
             onNyBooking={async (booking, dugnad) => {
@@ -3758,7 +3759,7 @@ function Admin({ medlemmer, prosjekter, innslag, dugnader, aktiviteter, utleie, 
 // ============================================================
 // Utleie (kun admin): valgfritt antall lokaler og båter
 // ============================================================
-function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, onLagreUtleie, onNyBooking, onOppdaterBooking, onSlettBooking, stil }) {
+function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, erAdmin, onLagreUtleie, onNyBooking, onOppdaterBooking, onSlettBooking, stil }) {
   const { C, input, etikett, primKnapp, sekKnapp, kort, bekreft, sporsmaal, varsle } = stil;
   const [viserSkjema, setViserSkjema] = useState(false);
   const [viserTidligere, setViserTidligere] = useState(false);
@@ -3779,7 +3780,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
   const [kontakt, setKontakt] = useState("");
   const [pris, setPris] = useState("");
   const [notat, setNotat] = useState("");
-  const [feil, setFeil] = useState("");
+  const [fakturaStatus, setFakturaStatus] = useState("ikke-sendt");
 
   function navnFor(id) { return medlemmer.find((m) => m.id === id)?.navn || "Ukjent"; }
   const idag = iDag();
@@ -3804,6 +3805,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
 
   function tomSkjema() {
     setObjektId(""); setDato(iDag()); setDatoSlutt(datoPluss(iDag(), 1)); setTid("12:00"); setTidSlutt("12:00"); setLeietaker(""); setKontakt(""); setPris(""); setNotat(""); setMannskapNotat("");
+    setFakturaStatus("ikke-sendt");
     setRedigerId(null); setViserSkjema(false); setFeil("");
   }
 
@@ -3813,6 +3815,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
     setDato(b.dato); setDatoSlutt(b.datoSlutt && b.datoSlutt !== b.dato ? b.datoSlutt : ""); setTid(b.tid || ""); setTidSlutt(b.tidSlutt || "");
     setLeietaker(b.leietaker || ""); setKontakt(b.kontakt || "");
     setPris(b.pris || ""); setNotat(b.notat || "");
+    setFakturaStatus(b.fakturaStatus || "ikke-sendt");
     setTrengerMannskap(false); setMannskapNotat("");
     setFeil(""); setViserSkjema(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -3901,6 +3904,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
         dato, datoSlutt: datoSlutt.trim() || "", tid: tid.trim(), tidSlutt: tidSlutt.trim(),
         leietaker: leietaker.trim(), kontakt: kontakt.trim(),
         pris: pris.trim(), notat: notat.trim(),
+        fakturaStatus,
       };
       let nyDugnad = null;
       if (!original.dugnadId && trengerMannskap) {
@@ -3920,6 +3924,7 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
       dato, datoSlutt: datoSlutt.trim() || "", tid: tid.trim(), tidSlutt: tidSlutt.trim(),
       leietaker: leietaker.trim(), kontakt: kontakt.trim(),
       pris: pris.trim(), notat: notat.trim(),
+      fakturaStatus,
       status: "forespurt",
       opprettetAv: bruker.id,
       dugnadId: null,
@@ -3999,6 +4004,13 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
                 {gjennomfoert ? "✓ Gjennomført — klar for fakturering" : bekreftet ? "✓ Bekreftet" : "Forespørsel"}
               </span>
               {b.pris ? ` · ${b.pris} kr` : ""}
+              {(erAdmin || bruker.id === utleie.kassererId) && (
+                <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+                  background: b.fakturaStatus === "betalt" ? "#4E7E5B" : b.fakturaStatus === "sendt" ? "#E0A93E" : C.signal,
+                  color: "#fff" }}>
+                  {b.fakturaStatus === "betalt" ? "✅ Betalt" : b.fakturaStatus === "sendt" ? "📬 Sendt" : "📄 Ikke sendt"}
+                </span>
+              )}
             </div>
             {b.notat && <div style={{ fontSize: 13, marginTop: 4 }}>{b.notat}</div>}
             {konflikt && (
@@ -4263,6 +4275,16 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
               <input style={input} type="text" inputMode="decimal" value={pris} onChange={(e) => setPris(e.target.value)} placeholder="f.eks. 2500" />
             </div>
           </div>
+          {(erAdmin || bruker.id === utleie.kassererId) && (
+            <div>
+              <label style={etikett}>Fakturastatus</label>
+              <select style={input} value={fakturaStatus} onChange={(e) => setFakturaStatus(e.target.value)}>
+                <option value="ikke-sendt">📄 Ikke sendt</option>
+                <option value="sendt">📬 Sendt</option>
+                <option value="betalt">✅ Betalt</option>
+              </select>
+            </div>
+          )}
           <div>
             <label style={etikett}>Notat (valgfritt)</label>
             <input style={input} value={notat} onChange={(e) => setNotat(e.target.value)} placeholder="f.eks. Nøkkel hentes hos formannen" />
