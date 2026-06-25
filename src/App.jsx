@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.30";
+const APP_VERSJON = "3.5.31";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -293,27 +293,23 @@ export default function Dugnadsloggen() {
     hentAlt();
   }, [sjekkerSesjon, session?.user?.id]);
 
-  // Værvarsling fra Yr for Askøy (60.3875, 5.1756)
+  // Værvarsling fra Open-Meteo for Askøy (60.3875, 5.1756) — støtter CORS fra nettleser
   useEffect(() => {
     async function hentVaer() {
       try {
         const res = await fetch(
-          "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=60.3875&lon=5.1756",
-          { headers: { "User-Agent": "AskoyKystlag/1.0 jwsture@gmail.com" } }
+          "https://api.open-meteo.com/v1/forecast?latitude=60.3875&longitude=5.1756&current=temperature_2m,wind_speed_10m,weather_code&wind_speed_unit=ms"
         );
         if (!res.ok) return;
         const data = await res.json();
-        const now = data.properties.timeseries[0];
-        const detaljer = now.data.instant.details;
-        const symbol = now.data.next_1_hours?.summary?.symbol_code || "";
-        const vaerTekst = {
-          clearsky: "☀️", fair: "🌤", partlycloudy: "⛅", cloudy: "☁️",
-          fog: "🌫", lightrain: "🌦", rain: "🌧", heavyrain: "🌧",
-          rainshowers: "🌦", lightrainshowers: "🌦", snowshowers: "🌨",
-          snow: "❄️", sleet: "🌨", thunder: "⛈",
-        };
-        const ikon = Object.entries(vaerTekst).find(([k]) => symbol.includes(k))?.[1] || "🌡";
-        setVaer({ temp: Math.round(detaljer.air_temperature), vind: Math.round(detaljer.wind_speed), ikon });
+        const c = data.current;
+        const kode = c.weather_code;
+        // WMO weather codes → emoji
+        const ikon = kode === 0 ? "☀️" : kode <= 2 ? "🌤" : kode <= 3 ? "☁️" :
+          kode <= 49 ? "🌫" : kode <= 59 ? "🌦" : kode <= 69 ? "🌧" :
+          kode <= 79 ? "❄️" : kode <= 82 ? "🌦" : kode <= 84 ? "🌨" :
+          kode <= 99 ? "⛈" : "🌡";
+        setVaer({ temp: Math.round(c.temperature_2m), vind: Math.round(c.wind_speed_10m), ikon });
       } catch (e) { /* valgfritt */ }
     }
     hentVaer();
