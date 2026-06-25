@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.31";
+const APP_VERSJON = "3.5.32";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -298,7 +298,7 @@ export default function Dugnadsloggen() {
     async function hentVaer() {
       try {
         const res = await fetch(
-          "https://api.open-meteo.com/v1/forecast?latitude=60.3875&longitude=5.1756&current=temperature_2m,wind_speed_10m,weather_code&wind_speed_unit=ms"
+          "https://api.open-meteo.com/v1/forecast?latitude=60.4067&longitude=5.1556&current=temperature_2m,wind_speed_10m,weather_code&wind_speed_unit=ms"
         );
         if (!res.ok) return;
         const data = await res.json();
@@ -522,7 +522,7 @@ export default function Dugnadsloggen() {
               <span>·</span>
               <span>💨 {vaer.vind} m/s</span>
               <span>·</span>
-              <span style={{ opacity: 0.6 }}>Kleppestø</span>
+              <span style={{ opacity: 0.6 }}>Strusshamn</span>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
