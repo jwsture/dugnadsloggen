@@ -18,7 +18,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.29";
+const APP_VERSJON = "3.5.30";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -180,6 +180,7 @@ export default function Dugnadsloggen() {
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
+  const [vaer, setVaer] = useState(null);
   const [session, setSession] = useState(null);
   const [sjekkerSesjon, setSjekkerSesjon] = useState(true);
   const [fane, setFane] = useState("timer");
@@ -291,6 +292,34 @@ export default function Dugnadsloggen() {
     setLaster(true);
     hentAlt();
   }, [sjekkerSesjon, session?.user?.id]);
+
+  // Værvarsling fra Yr for Askøy (60.3875, 5.1756)
+  useEffect(() => {
+    async function hentVaer() {
+      try {
+        const res = await fetch(
+          "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=60.3875&lon=5.1756",
+          { headers: { "User-Agent": "AskoyKystlag/1.0 jwsture@gmail.com" } }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const now = data.properties.timeseries[0];
+        const detaljer = now.data.instant.details;
+        const symbol = now.data.next_1_hours?.summary?.symbol_code || "";
+        const vaerTekst = {
+          clearsky: "☀️", fair: "🌤", partlycloudy: "⛅", cloudy: "☁️",
+          fog: "🌫", lightrain: "🌦", rain: "🌧", heavyrain: "🌧",
+          rainshowers: "🌦", lightrainshowers: "🌦", snowshowers: "🌨",
+          snow: "❄️", sleet: "🌨", thunder: "⛈",
+        };
+        const ikon = Object.entries(vaerTekst).find(([k]) => symbol.includes(k))?.[1] || "🌡";
+        setVaer({ temp: Math.round(detaljer.air_temperature), vind: Math.round(detaljer.wind_speed), ikon });
+      } catch (e) { /* valgfritt */ }
+    }
+    hentVaer();
+    const id = setInterval(hentVaer, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Hent data på nytt med jevne mellomrom mens noen er innlogget, slik at endringer
   // andre medlemmer gjør (nye registreringer, nye medlemmer, andres timer) dukker opp
@@ -491,6 +520,15 @@ export default function Dugnadsloggen() {
     <div style={{ minHeight: "100vh", background: C.kritt, fontFamily: "'Helvetica Neue', Arial, sans-serif", color: C.tjaere }}>
       <header style={{ background: C.hav, color: C.kritt, padding: "env(safe-area-inset-top, 16px) 12px 0", paddingTop: "max(16px, env(safe-area-inset-top))" }}>
         <div style={{ maxWidth: 760, margin: "0 auto" }}>
+          {vaer && (
+            <div style={{ fontSize: 12, color: "rgba(247,245,240,0.75)", marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+              <span>{vaer.ikon} {vaer.temp}°C</span>
+              <span>·</span>
+              <span>💨 {vaer.vind} m/s</span>
+              <span>·</span>
+              <span style={{ opacity: 0.6 }}>Kleppestø</span>
+            </div>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               {logo
@@ -4083,12 +4121,17 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
     const flerDogn = datoSlutt.trim() && datoSlutt.trim() !== dato;
     if (!flerDogn && tidSlutt && tid && tidSlutt <= tid) { setFeil("Sluttiden må være etter starttiden samme dag."); return; }
 
-    if (berorteAvtaler.length > 0) {
-      const liste = berorteAvtaler.map((e) => `• ${avtaleLinje(e)}`).join("\n");
-      if (!(await bekreft(`⚠ DOBBELTBOOKING!\n\nPerioden din overlapper med eksisterende avtale på ${valgtObjekt.navn}:\n\n${liste}\n\nVil du lagre likevel?`))) return;
-    } else if (avtalerSammeDag.length > 0) {
-      const liste = avtalerSammeDag.map((e) => `• ${avtaleLinje(e)}`).join("\n");
-      if (!(await bekreft(`Det finnes andre avtaler på ${valgtObjekt.navn} i denne perioden:\n\n${liste}\n\nDin periode går klar av disse. Lagre?`))) return;
+    const original0 = redigerId ? bookinger.find((b) => b.id === redigerId) : null;
+    const kunFakturaEndring = original0 && original0.dato === dato &&
+      original0.datoSlutt === datoSlutt.trim() && original0.objektId === valgtObjekt.id;
+    if (!kunFakturaEndring) {
+      if (berorteAvtaler.length > 0) {
+        const liste = berorteAvtaler.map((e) => `• ${avtaleLinje(e)}`).join("\n");
+        if (!(await bekreft(`⚠ DOBBELTBOOKING!\n\nPerioden din overlapper med eksisterende avtale på ${valgtObjekt.navn}:\n\n${liste}\n\nVil du lagre likevel?`))) return;
+      } else if (avtalerSammeDag.length > 0) {
+        const liste = avtalerSammeDag.map((e) => `• ${avtaleLinje(e)}`).join("\n");
+        if (!(await bekreft(`Det finnes andre avtaler på ${valgtObjekt.navn} i denne perioden:\n\n${liste}\n\nDin periode går klar av disse. Lagre?`))) return;
+      }
     }
 
     if (redigerId) {
@@ -4206,14 +4249,30 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
               {b.pris ? ` · ${b.pris} kr` : ""}
               {(erAdmin || bruker.id === utleie.kassererId) && (
                 <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
-                  background: b.fakturaStatus === "betalt" ? "#4E7E5B" : b.fakturaStatus === "sendt" ? "#E0A93E" : C.signal,
+                  background: b.fakturaStatus === "betalt" ? "#4E7E5B" : b.fakturaStatus === "fakturert" ? "#4E7E5B" : b.fakturaStatus === "sendt" ? "#E0A93E" : C.signal,
                   color: "#fff" }}>
-                  {b.fakturaStatus === "betalt" ? "✅ Betalt" : b.fakturaStatus === "sendt" ? "📬 Sendt" : "📄 Ikke sendt"}
+                  {b.fakturaStatus === "betalt" ? "✅ Betalt" : b.fakturaStatus === "fakturert" ? "🧾 Fakturert" : b.fakturaStatus === "sendt" ? "📬 Sendt" : "📄 Ikke sendt"}
                 </span>
               )}
             </div>
             {(erAdmin || bruker.id === utleie.kassererId) && b.fakturaNotat && (
               <div style={{ fontSize: 13, color: C.hav, marginTop: 3 }}>🧾 {b.fakturaNotat}</div>
+            )}
+            {(erAdmin || bruker.id === utleie.kassererId) && b.fakturaStatus !== "betalt" && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {b.fakturaStatus === "sendt" && (
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: "#4E7E5B", color: "#2F5A3C" }}
+                    onClick={() => onOppdaterBooking({ ...b, fakturaStatus: "fakturert" })}>
+                    🧾 Marker fakturert
+                  </button>
+                )}
+                {(b.fakturaStatus === "fakturert" || b.fakturaStatus === "sendt") && (
+                  <button style={{ ...sekKnapp, padding: "4px 10px", fontSize: 12, borderColor: "#4E7E5B", color: "#2F5A3C" }}
+                    onClick={() => onOppdaterBooking({ ...b, fakturaStatus: "betalt" })}>
+                    ✅ Marker betalt
+                  </button>
+                )}
+              </div>
             )}
             {b.notat && <div style={{ fontSize: 13, marginTop: 4 }}>{b.notat}</div>}
             {konflikt && (
@@ -4256,8 +4315,8 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
               Send faktureringsgrunnlaget til kassereren{kasserer ? ` (${kasserer.navn})` : ""}:
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={{ ...primKnapp, padding: "8px 14px", fontSize: 13 }} onClick={() => sendTilKasserer(b)}>
-                📧 Send e-post til kasserer
+              <button style={{ ...primKnapp, padding: "8px 14px", fontSize: 13 }} onClick={() => { sendTilKasserer(b); onOppdaterBooking({ ...b, fakturaStatus: "sendt" }); }}>
+                📧 Send til kasserer
               </button>
               <button style={{ ...sekKnapp, padding: "8px 14px", fontSize: 13 }} onClick={() => kopierFakturaInfo(b)}>
                 Kopier info
@@ -4487,7 +4546,8 @@ function Utleie({ utleie, dugnader, medlemmer, prosjekter, bruker, kanRedigere, 
                 <label style={etikett}>Fakturastatus</label>
                 <select style={input} value={fakturaStatus} onChange={(e) => setFakturaStatus(e.target.value)}>
                   <option value="ikke-sendt">📄 Ikke sendt</option>
-                  <option value="sendt">📬 Sendt</option>
+                  <option value="sendt">📬 Sendt til kasserer</option>
+                  <option value="fakturert">🧾 Fakturert</option>
                   <option value="betalt">✅ Betalt</option>
                 </select>
               </div>
