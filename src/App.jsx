@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.36";
+const APP_VERSJON = "3.5.37";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -474,10 +474,9 @@ export default function Dugnadsloggen() {
     if (!bruker) return;
     try {
       window.OneSignalDeferred?.push(async function(OneSignal) {
-        const tilstand = await OneSignal.getNotificationPermission();
+        const tilstand = Notification?.permission;
         if (tilstand === "default") {
-          // Vent litt før vi spør, så siden er ferdig lastet
-          setTimeout(() => OneSignal.showSlidedownPrompt(), 3000);
+          setTimeout(() => OneSignal.Slidedown?.promptPush(), 3000);
         }
       });
     } catch (e) { /* push er valgfritt */ }
@@ -2033,7 +2032,7 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Basic ${import.meta.env.VITE_ONESIGNAL_API_KEY}`
+          "Authorization": `Key ${import.meta.env.VITE_ONESIGNAL_API_KEY}`
         },
         body: JSON.stringify({
           app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
