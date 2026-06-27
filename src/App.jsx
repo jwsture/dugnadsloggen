@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.35";
+const APP_VERSJON = "3.5.36";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -2026,6 +2026,25 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
     };
     await onLagre([...dugnader, d]);
     setNettopOpprettetVarsel(d);
+
+    // Send push-varsel til alle om ny dugnad
+    try {
+      await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Basic ${import.meta.env.VITE_ONESIGNAL_API_KEY}`
+        },
+        body: JSON.stringify({
+          app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
+          included_segments: ["All"],
+          headings: { nb: "Ny dugnad planlagt! 🔨" },
+          contents: { nb: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}` },
+          url: "https://askoy-kystlag.vercel.app",
+        }),
+      });
+    } catch (e) { /* push er valgfritt */ }
+
     tomSkjema();
   }
 
