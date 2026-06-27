@@ -2,6 +2,17 @@ import { useState, useEffect } from "react";
 import { storage } from "./storage.js";
 import { supabase, erKonfigurert } from "./supabase.js";
 
+// OneSignal push-varsler
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+window.OneSignalDeferred.push(async function(OneSignal) {
+  await OneSignal.init({
+    appId: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
+    safari_web_id: "web.onesignal.auto.10292181-f5a7-4920-9ee0-daa939b7c9fb",
+    notifyButton: { enable: false },
+    allowLocalhostAsSecureOrigin: true,
+  });
+});
+
 // Gjør lagringslaget tilgjengelig som window.storage, slik resten av appen forventer
 if (typeof window !== "undefined") window.storage = storage;
 
@@ -18,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.34";
+const APP_VERSJON = "3.5.35";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -457,6 +468,20 @@ export default function Dugnadsloggen() {
       setBruker({ id: ny.id, navn: ny.navn });
     })();
   }, [laster, session, medlemmer, bruker]);
+
+  // Be om tillatelse til push-varsler når bruker er innlogget
+  useEffect(() => {
+    if (!bruker) return;
+    try {
+      window.OneSignalDeferred?.push(async function(OneSignal) {
+        const tilstand = await OneSignal.getNotificationPermission();
+        if (tilstand === "default") {
+          // Vent litt før vi spør, så siden er ferdig lastet
+          setTimeout(() => OneSignal.showSlidedownPrompt(), 3000);
+        }
+      });
+    } catch (e) { /* push er valgfritt */ }
+  }, [bruker]);
 
   // Hvis admin blokkerer den innloggede brukeren mens de sitter inne, logges de ut med en gang
   useEffect(() => {
