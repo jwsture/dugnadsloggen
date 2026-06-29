@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.42";
+const APP_VERSJON = "3.5.43";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -194,7 +194,11 @@ export default function Dugnadsloggen() {
   const [vaer, setVaer] = useState(null);
   const [session, setSession] = useState(null);
   const [sjekkerSesjon, setSjekkerSesjon] = useState(true);
-  const [fane, setFane] = useState("timer");
+  const [fane, setFane] = useState(() => {
+    const hash = window.location.hash.replace("#", "");
+    const gyldige = ["timer", "kalender", "prosjekter", "medlemmer", "logg", "rapport", "utleie", "admin"];
+    return gyldige.includes(hash) ? hash : "timer";
+  });
   const [aapent, setAapent] = useState(null);
   const [dialog, setDialog] = useState(null);
 
@@ -541,7 +545,7 @@ export default function Dugnadsloggen() {
   function Fane({ id, tekst }) {
     const a = fane === id;
     return (
-      <button onClick={() => { setFane(id); setAapent(null); setFeil(""); setInfo(""); }}
+      <button onClick={() => { setFane(id); window.location.hash = id; setAapent(null); setFeil(""); setInfo(""); }}
         style={{ flex: "1 0 auto", padding: "10px 7px", background: "transparent", border: "none", borderBottom: a ? `3px solid ${C.signal}` : "3px solid transparent", color: a ? C.kritt : "rgba(247,245,240,0.6)", fontWeight: a ? 700 : 500, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" }}>
         {tekst}
       </button>
@@ -1032,9 +1036,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                       app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
                       headings: { en: pushTittel.trim(), nb: pushTittel.trim() },
                       contents: { en: pushMelding.trim(), nb: pushMelding.trim() },
-                      url: "https://askoy-kystlag.vercel.app",
-                    };
-                    if (erGruppe) {
+                      url: "https://askoy-kystlag.vercel.app/",
                       body.filters = [{ field: "tag", key: `gruppe_${pushGruppe}`, relation: "=", value: "true" }];
                     } else {
                       body.included_segments = ["All"];
@@ -2102,7 +2104,7 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
           included_segments: ["All"],
           headings: { en: "Ny dugnad planlagt! 🔨", nb: "Ny dugnad planlagt! 🔨" },
           contents: { en: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}`, nb: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}` },
-          url: "https://askoy-kystlag.vercel.app",
+          url: "https://askoy-kystlag.vercel.app/#kalender",
         }),
       });
       const respData = await resp.json();
