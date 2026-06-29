@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.44";
+const APP_VERSJON = "3.5.45";
 const APP_OPPDATERT = "29.06.2026";
 
 const AKT_STANDARD = [
@@ -55,6 +55,7 @@ const K_BACKUPINFO = "akl-backupinfo";
 const K_GAMMEL = "askoy-kystlag-dugnad";
 const K_GRUPPER = "akl-grupper";
 const K_KONTAKTER = "akl-kontakter";
+const K_PUSHLOGG = "akl-pushlogg";
 const UTLEIE_STANDARD = {
   objekter: [
     { id: "lokale-a", navn: "Lokale 1", type: "lokale" },
@@ -188,6 +189,7 @@ export default function Dugnadsloggen() {
   const [sisteBackup, setSisteBackup] = useState(null);
   const [grupper, setGrupper] = useState([]);
   const [kontakter, setKontakter] = useState([]);
+  const [pushLogg, setPushLogg] = useState([]);
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
@@ -285,6 +287,11 @@ export default function Dugnadsloggen() {
       } catch (e) { /* ingen kontakter ennå */ }
 
       try {
+        const r = await window.storage.get(K_PUSHLOGG, true);
+        if (r?.value) setPushLogg(JSON.parse(r.value));
+      } catch (e) { /* ingen push-logg ennå */ }
+
+      try {
         const r = await window.storage.get(K_BACKUPINFO, true);
         if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
       } catch (e) { /* ingen backup tatt ennå */ }
@@ -360,6 +367,12 @@ export default function Dugnadsloggen() {
   const lagreDugnader = lagre(K_DUGNAD, setDugnader, "Kunne ikke lagre dugnaden.");
   const lagreGrupper = lagre(K_GRUPPER, setGrupper, "Kunne ikke lagre grupper.");
   const lagreKontakter = lagre(K_KONTAKTER, setKontakter, "Kunne ikke lagre kontakter.");
+  const lagrePushLogg = lagre(K_PUSHLOGG, setPushLogg, "Kunne ikke lagre push-loggen.");
+  // Registrer en sendt push i loggen. Beholder de 200 nyeste.
+  const loggPush = async (post) => {
+    const ny = { id: nyId(), tidspunkt: new Date().toISOString(), sendtAv: bruker?.navn || "Ukjent", ...post };
+    await lagrePushLogg([ny, ...pushLogg].slice(0, 200));
+  };
   const lagreAktiviteter = lagre(K_AKT, setAktiviteter, "Kunne ikke lagre aktivitetslisten.");
   const lagreUtleie = lagre(K_UTLEIE, setUtleie, "Kunne ikke lagre utleiedataene.");
 
@@ -651,6 +664,7 @@ export default function Dugnadsloggen() {
           <Kalender
             dugnader={dugnader} medlemmer={medlemmer} prosjekter={prosjekter} innslag={innslag} bruker={bruker} erAdmin={erAdmin} aktiviteter={aktiviteter}
             onLagre={lagreDugnader}
+            onLoggPush={loggPush}
             onFoerTimer={async (nyeInnslag) => {
               await lagreInnslag([...nyeInnslag, ...innslag]);
               setInfo(`Førte ${nyeInnslag.length} timeregistrering${nyeInnslag.length === 1 ? "" : "er"} for de oppmøtte.`);
@@ -709,6 +723,7 @@ export default function Dugnadsloggen() {
             onLagreGrupper={lagreGrupper}
             onLagreKontakter={lagreKontakter}
             onLagreMeta={lagreMeta}
+            onLoggPush={loggPush}
             onLagreEgetTelefon={(telefon) => lagreMeta(medlemmer.map((m) => (m.id === bruker.id ? { ...m, telefon } : m)))}
             stil={stil}
           />
@@ -717,6 +732,7 @@ export default function Dugnadsloggen() {
         {fane === "logg" && erAdmin && (
           <Logg
             innslag={innslag} medlemmer={medlemmer} prosjekter={prosjekter} bruker={bruker} erAdmin={erAdmin}
+            pushLogg={pushLogg}
             onSlett={async (id) => {
               if (!(await bekreft("Slette denne registreringen?"))) return;
               await lagreInnslag(innslag.filter((i) => i.id !== id));
@@ -911,7 +927,7 @@ function DialogBoks({ dialog, onLukk, stil }) {
 // ============================================================
 // Medlemsregister: navn, e-post, telefon — synlig for alle innloggede
 // ============================================================
-function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kontakter, erAdmin, onLagreGrupper, onLagreKontakter, onLagreEgetTelefon, onLagreMeta, stil }) {
+function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kontakter, erAdmin, onLagreGrupper, onLagreKontakter, onLagreEgetTelefon, onLagreMeta, onLoggPush, stil }) {
   const { C, input, etikett, primKnapp, kort, sekKnapp, bekreft, sporsmaal, varsle } = stil;
   const [sok, setSok] = useState("");
   const [redigerer, setRedigerer] = useState(false);
@@ -1049,7 +1065,22 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                       body: JSON.stringify(body),
                     });
                     const data = await resp.json();
-                    if (resp.ok) { setPushStatus({ ok: true, antall: data.recipients || "?" }); setPushTittel(""); setPushMelding(""); }
+                    if (resp.ok) {
+                      const gruppe = erGruppe ? (grupper || []).find((g) => g.id === pushGruppe) : null;
+                      const mottakereNavn = gruppe
+                        ? (gruppe.medlemmer || []).map((id) => medlemmer.find((m) => m.id === id)?.navn || "Ukjent")
+                        : null;
+                      onLoggPush?.({
+                        kilde: "Admin",
+                        tittel: pushTittel.trim(),
+                        melding: pushMelding.trim(),
+                        omfang: gruppe ? "gruppe" : "alle",
+                        gruppeNavn: gruppe ? gruppe.navn : null,
+                        mottakere: mottakereNavn,
+                        antall: data.recipients ?? null,
+                      });
+                      setPushStatus({ ok: true, antall: data.recipients || "?" }); setPushTittel(""); setPushMelding("");
+                    }
                     else { setPushStatus({ ok: false, feil: data.errors?.[0] || "Ukjent feil" }); }
                   } catch (e) { setPushStatus({ ok: false, feil: e.message }); }
                   setPushJobber(false);
@@ -1965,7 +1996,7 @@ function Innlogging({ logo, stil }) {
 // ============================================================
 // Kalender
 // ============================================================
-function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, aktiviteter, onLagre, onFoerTimer, stil }) {
+function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, aktiviteter, onLagre, onFoerTimer, onLoggPush, stil }) {
   const { C, input, etikett, primKnapp, sekKnapp, kort, bekreft, varsle } = stil;
   const [viserSkjema, setViserSkjema] = useState(false);
   const [tittel, setTittel] = useState("");
@@ -2051,12 +2082,14 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
       url: "https://askoy-kystlag.vercel.app/#kalender",
     };
 
+    let mottakereNavn = null; // null = alle medlemmer; ellers liste med navn
     if (omfang === "prosjekt" && d.prosjektId) {
       const ider = medlemmerForProsjekt(d.prosjektId);
       if (ider.length === 0) {
         await varsle("Fant ingen medlemmer tilknyttet prosjektet å sende push til.");
         return;
       }
+      mottakereNavn = ider.map((id) => navnFor(id));
       // Målrett kun til prosjektets medlemmer via bruker_id-taggen
       const filters = [];
       ider.forEach((id, i) => {
@@ -2079,6 +2112,14 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
       });
       const data = await resp.json();
       if (resp.ok) {
+        onLoggPush?.({
+          kilde: "Kalender",
+          tittel: "Ny dugnad planlagt! 🔨",
+          melding: innhold,
+          omfang: mottakereNavn ? "prosjekt" : "alle",
+          mottakere: mottakereNavn,
+          antall: data.recipients ?? null,
+        });
         await varsle(`📲 Push sendt til ${data.recipients ?? "?"} mottakere.`);
       } else {
         await varsle(`Kunne ikke sende push: ${data.errors?.[0] || "ukjent feil"}`);
@@ -3220,8 +3261,50 @@ function InnslagBilder({ innslag, C }) {
 // ============================================================
 // Logg
 // ============================================================
-function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, onEndre, stil }) {
+
+// Visning av sendte push-varsler (hvem de gikk til)
+function PushLoggVisning({ pushLogg, C }) {
+  if (!pushLogg || pushLogg.length === 0) {
+    return <p style={{ color: C.dempet, textAlign: "center", padding: 28 }}>Ingen push-varsler er sendt ennå.</p>;
+  }
+  const fTidspunkt = (iso) => {
+    try {
+      return new Date(iso).toLocaleString("nb-NO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  };
+  const omfangTekst = (p) =>
+    p.omfang === "gruppe" ? `Gruppe: ${p.gruppeNavn || "—"}`
+    : p.omfang === "prosjekt" ? "Prosjektets medlemmer"
+    : "Alle medlemmer";
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {pushLogg.map((p) => (
+        <div key={p.id} style={{ background: "#fff", border: `1px solid ${C.sand}`, borderLeft: `4px solid ${C.hav}`, borderRadius: 8, padding: "11px 14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>{p.tittel || "(uten tittel)"}</span>
+            <span style={{ fontSize: 12, color: C.dempet }}>{fTidspunkt(p.tidspunkt)}</span>
+          </div>
+          {p.melding && <div style={{ fontSize: 13, color: C.tjaere, marginTop: 3 }}>{p.melding}</div>}
+          <div style={{ fontSize: 12, color: C.dempet, marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ background: C.sand, borderRadius: 5, padding: "1px 7px", fontWeight: 600 }}>{p.kilde || "—"}</span>
+            <span>{omfangTekst(p)}</span>
+            {p.antall != null && <span>· {p.antall} nådd</span>}
+            <span>· sendt av {p.sendtAv || "Ukjent"}</span>
+          </div>
+          {p.mottakere && p.mottakere.length > 0 && (
+            <div style={{ fontSize: 12, color: C.dempet, marginTop: 6 }}>
+              <span style={{ fontWeight: 600 }}>Til:</span> {p.mottakere.join(", ")}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, pushLogg, onSlett, onEndre, stil }) {
   const { C, input, etikett, sekKnapp, primKnapp, kort, bekreft } = stil;
+  const [visning, setVisning] = useState("timer"); // "timer" | "push"
   const [fMedlem, setFMedlem] = useState("alle");
   const [fAar, setFAar] = useState("alle");
   const [redigererEtikett, setRedigererEtikett] = useState(null); // innslag-id
@@ -3272,6 +3355,14 @@ function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, onEndr
 
   return (
     <section>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        <button onClick={() => setVisning("timer")} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${C.sand}`, cursor: "pointer", fontWeight: 700, fontSize: 14, background: visning === "timer" ? C.hav : "#fff", color: visning === "timer" ? "#fff" : C.tjaere }}>Timer</button>
+        <button onClick={() => setVisning("push")} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: `1px solid ${C.sand}`, cursor: "pointer", fontWeight: 700, fontSize: 14, background: visning === "push" ? C.hav : "#fff", color: visning === "push" ? "#fff" : C.tjaere }}>📲 Push-logg</button>
+      </div>
+
+      {visning === "push" && <PushLoggVisning pushLogg={pushLogg} C={C} />}
+
+      {visning === "timer" && (<>
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
         <select value={fMedlem} onChange={(e) => setFMedlem(e.target.value)} style={{ ...input, width: "auto", flex: 1, minWidth: 140 }}>
           <option value="alle">Alle medlemmer</option>
@@ -3353,6 +3444,7 @@ function Logg({ innslag, medlemmer, prosjekter, bruker, erAdmin, onSlett, onEndr
       {filtrert.length > 0 && (
         <button onClick={eksporterCSV} style={{ ...sekKnapp, width: "100%", marginTop: 16 }}>Last ned som regneark (CSV)</button>
       )}
+      </>)}
     </section>
   );
 }
