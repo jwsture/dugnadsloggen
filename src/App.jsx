@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.41";
+const APP_VERSJON = "3.5.42";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -478,9 +478,14 @@ export default function Dugnadsloggen() {
         if (tilstand === "default") {
           setTimeout(() => OneSignal.Slidedown?.promptPush(), 3000);
         }
+        // Tag brukeren med sine grupper i OneSignal
+        const brukerGrupper = (grupper || []).filter((g) => g.medlemmer?.includes(bruker.id));
+        const tags = { bruker_id: bruker.id };
+        brukerGrupper.forEach((g) => { tags[`gruppe_${g.id}`] = "true"; });
+        await OneSignal.User?.addTags(tags);
       });
     } catch (e) { /* push er valgfritt */ }
-  }, [bruker]);
+  }, [bruker, grupper]);
 
   // Hvis admin blokkerer den innloggede brukeren mens de sitter inne, logges de ut med en gang
   useEffect(() => {
@@ -921,6 +926,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
   // Push-varsler
   const [pushTittel, setPushTittel] = useState("");
   const [pushMelding, setPushMelding] = useState("");
+  const [pushGruppe, setPushGruppe] = useState("alle");
   const [pushJobber, setPushJobber] = useState(false);
   const [pushStatus, setPushStatus] = useState(null);
   const [nyttKontaktTelefon, setNyttKontaktTelefon] = useState("");
@@ -1000,6 +1006,15 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
           {!smsModus && (
             <div style={{ display: "grid", gap: 10 }}>
               <div>
+                <label style={etikett}>Send til</label>
+                <select style={input} value={pushGruppe} onChange={(e) => setPushGruppe(e.target.value)}>
+                  <option value="alle">Alle abonnenter</option>
+                  {(grupper || []).map((g) => (
+                    <option key={g.id} value={g.id}>{g.navn}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label style={etikett}>Tittel</label>
                 <input style={input} value={pushTittel} onChange={(e) => setPushTittel(e.target.value)} placeholder="f.eks. Dugnad i morgen!" />
               </div>
@@ -1012,16 +1027,22 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                 onClick={async () => {
                   setPushJobber(true); setPushStatus(null);
                   try {
+                    const erGruppe = pushGruppe !== "alle";
+                    const body = {
+                      app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
+                      headings: { en: pushTittel.trim(), nb: pushTittel.trim() },
+                      contents: { en: pushMelding.trim(), nb: pushMelding.trim() },
+                      url: "https://askoy-kystlag.vercel.app",
+                    };
+                    if (erGruppe) {
+                      body.filters = [{ field: "tag", key: `gruppe_${pushGruppe}`, relation: "=", value: "true" }];
+                    } else {
+                      body.included_segments = ["All"];
+                    }
                     const resp = await fetch("https://onesignal.com/api/v1/notifications", {
                       method: "POST",
                       headers: { "Content-Type": "application/json", "Authorization": `Key ${import.meta.env.VITE_ONESIGNAL_API_KEY}` },
-                      body: JSON.stringify({
-                        app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
-                        included_segments: ["All"],
-                        headings: { en: pushTittel.trim(), nb: pushTittel.trim() },
-                        contents: { en: pushMelding.trim(), nb: pushMelding.trim() },
-                        url: "https://askoy-kystlag.vercel.app",
-                      }),
+                      body: JSON.stringify(body),
                     });
                     const data = await resp.json();
                     if (resp.ok) { setPushStatus({ ok: true, antall: data.recipients || "?" }); setPushTittel(""); setPushMelding(""); }
@@ -1029,7 +1050,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                   } catch (e) { setPushStatus({ ok: false, feil: e.message }); }
                   setPushJobber(false);
                 }}>
-                {pushJobber ? "Sender …" : "📣 Send push til alle"}
+                {pushJobber ? "Sender …" : `📣 Send${pushGruppe !== "alle" ? ` til ${(grupper || []).find((g) => g.id === pushGruppe)?.navn || "gruppe"}` : " til alle"}`}
               </button>
               {pushStatus && (
                 <div style={{ background: pushStatus.ok ? "#EAF3EC" : "#FBEAE8", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: pushStatus.ok ? "#2F5A3C" : C.signal, fontWeight: 600 }}>
