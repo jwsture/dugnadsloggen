@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.38";
+const APP_VERSJON = "3.5.39";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -2039,8 +2039,8 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
         body: JSON.stringify({
           app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
           included_segments: ["All"],
-          headings: { nb: "Ny dugnad planlagt! 🔨" },
-          contents: { nb: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}` },
+          headings: { en: "Ny dugnad planlagt! 🔨", nb: "Ny dugnad planlagt! 🔨" },
+          contents: { en: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}`, nb: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}` },
           url: "https://askoy-kystlag.vercel.app",
         }),
       });
