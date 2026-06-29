@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.40";
+const APP_VERSJON = "3.5.41";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -983,17 +983,31 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
         <div style={kort}>
           <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>📣 Kommunikasjon</h2>
           <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>Send push-varsel eller SMS til medlemmene.</p>
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <label style={etikett}>Tittel</label>
-              <input style={input} value={pushTittel} onChange={(e) => setPushTittel(e.target.value)} placeholder="f.eks. Dugnad i morgen!" />
-            </div>
-            <div>
-              <label style={etikett}>Melding</label>
-              <textarea style={{ ...input, minHeight: 70, resize: "vertical" }} value={pushMelding} onChange={(e) => setPushMelding(e.target.value)} placeholder="f.eks. Husk oppmøte kl. 10 ved Kystbua!" />
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={{ ...primKnapp, flex: 1, opacity: pushJobber ? 0.6 : 1 }}
+
+          {/* Faner: Push / SMS */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <button style={{ ...sekKnapp, padding: "6px 16px", fontSize: 13, background: !smsModus ? C.hav : undefined, color: !smsModus ? C.kritt : undefined, borderColor: !smsModus ? C.hav : undefined }}
+              onClick={() => setSmsModus(false)}>
+              📣 Push
+            </button>
+            <button style={{ ...sekKnapp, padding: "6px 16px", fontSize: 13, background: smsModus ? C.hav : undefined, color: smsModus ? C.kritt : undefined, borderColor: smsModus ? C.hav : undefined }}
+              onClick={() => { setSmsModus(true); setValgte(new Set()); }}>
+              💬 SMS
+            </button>
+          </div>
+
+          {/* Push-panel */}
+          {!smsModus && (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <label style={etikett}>Tittel</label>
+                <input style={input} value={pushTittel} onChange={(e) => setPushTittel(e.target.value)} placeholder="f.eks. Dugnad i morgen!" />
+              </div>
+              <div>
+                <label style={etikett}>Melding</label>
+                <textarea style={{ ...input, minHeight: 70, resize: "vertical" }} value={pushMelding} onChange={(e) => setPushMelding(e.target.value)} placeholder="f.eks. Husk oppmøte kl. 10 ved Kystbua!" />
+              </div>
+              <button style={{ ...primKnapp, opacity: pushJobber ? 0.6 : 1 }}
                 disabled={pushJobber || !pushTittel.trim() || !pushMelding.trim()}
                 onClick={async () => {
                   setPushJobber(true); setPushStatus(null);
@@ -1017,13 +1031,71 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                 }}>
                 {pushJobber ? "Sender …" : "📣 Send push til alle"}
               </button>
+              {pushStatus && (
+                <div style={{ background: pushStatus.ok ? "#EAF3EC" : "#FBEAE8", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: pushStatus.ok ? "#2F5A3C" : C.signal, fontWeight: 600 }}>
+                  {pushStatus.ok ? `✓ Sendt til ${pushStatus.antall} abonnenter!` : `Feil: ${pushStatus.feil}`}
+                </div>
+              )}
             </div>
-            {pushStatus && (
-              <div style={{ background: pushStatus.ok ? "#EAF3EC" : "#FBEAE8", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: pushStatus.ok ? "#2F5A3C" : C.signal, fontWeight: 600 }}>
-                {pushStatus.ok ? `✓ Sendt til ${pushStatus.antall} abonnenter!` : `Feil: ${pushStatus.feil}`}
+          )}
+
+          {/* SMS-panel */}
+          {smsModus && (
+            <div style={{ display: "grid", gap: 10 }}>
+              <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>
+                Huk av de du vil sende til i medlemslisten nedenfor, trykk «Send SMS», skriv meldingen og send.
+              </p>
+              {alleGrupper.length > 0 && (
+                <div>
+                  <label style={{ ...etikett, marginBottom: 4 }}>Velg fra gruppe</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {alleGrupper.map((g) => (
+                      <button key={g.id} style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => velgGruppe(g.id)}>
+                        {g.navn}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={velgAlle}>
+                  Velg alle ({filtrert.filter((m) => m.telefon).length})
+                </button>
+                {valgte.size > 0 && (
+                  <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={fjernAlle}>Fjern alle</button>
+                )}
               </div>
-            )}
-          </div>
+              {valgte.size > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button style={{ ...primKnapp, flex: 1 }} onClick={async () => {
+                    const erIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+                    if (erIOS && valgte.size > 1) {
+                      await varsle(`📱 iPhone-tips:\n\niPhone støtter ikke å sende til flere på én gang via denne knappen.\n\nBruk «📋 Kopier»-knappen ved siden av, og lim numrene inn i «Til:»-feltet i iMessage.`);
+                      return;
+                    }
+                    sendSms();
+                  }}>
+                    💬 Send SMS ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
+                  </button>
+                  <button style={{ ...sekKnapp, padding: "9px 14px", fontSize: 14 }}
+                    onClick={async () => {
+                      const alleKontakter = kontakter || [];
+                      const numre = [...valgte]
+                        .map((id) => { const m = medlemmer.find((x) => x.id === id); if (m) return m.telefon; return alleKontakter.find((k) => k.id === id)?.telefon; })
+                        .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
+                      try {
+                        await navigator.clipboard.writeText(numre.join(","));
+                        await varsle(`${numre.length} numre kopiert!\n\nLim dem inn i «Til:»-feltet i iMessage, trykk mellomrom etter siste nummer, skriv deretter meldingen.`);
+                      } catch (e) {
+                        await varsle(`Kopier disse numrene manuelt:\n\n${numre.join(",")}`);
+                      }
+                    }}>
+                    📋 Kopier
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -1034,96 +1106,9 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input style={{ ...input, flex: 1 }} value={sok} onChange={(e) => setSok(e.target.value)} placeholder="Søk etter navn …" />
-          <button style={{ ...sekKnapp, padding: "8px 14px", fontSize: 13, background: smsModus ? C.hav : undefined, color: smsModus ? C.kritt : undefined, borderColor: smsModus ? C.hav : undefined }}
-            onClick={() => { setSmsModus(!smsModus); setValgte(new Set()); }}>
-            💬 {smsModus ? "Avbryt SMS" : "Send SMS"}
-          </button>
         </div>
       </div>
 
-      {smsModus && (
-        <div style={{ ...kort, borderLeft: `4px solid ${C.hav}`, display: "grid", gap: 10 }}>
-          <div style={{ fontWeight: 700, fontSize: 14.5 }}>💬 Velg hvem du vil sende SMS til</div>
-          <p style={{ margin: 0, fontSize: 13, color: C.dempet }}>
-            Huk av de du vil sende til, trykk «Åpne i SMS-appen», skriv meldingen og send.
-            Bare medlemmer med registrert telefonnummer kan velges.
-          </p>
-          {alleGrupper.length > 0 && (
-            <div>
-              <label style={{ ...etikett, marginBottom: 4 }}>Velg fra gruppe</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {alleGrupper.map((g) => (
-                  <button key={g.id} style={{ ...sekKnapp, padding: "5px 12px", fontSize: 13 }} onClick={() => velgGruppe(g.id)}>
-                    {g.navn}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={velgAlle}>
-              Velg alle ({filtrert.filter((m) => m.telefon).length})
-            </button>
-            {valgte.size > 0 && (
-              <button style={{ ...sekKnapp, padding: "6px 12px", fontSize: 13 }} onClick={fjernAlle}>Fjern alle</button>
-            )}
-          </div>
-          {valgte.size > 0 && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={{ ...primKnapp, flex: 1 }} onClick={async () => {
-                const erIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-                if (erIOS && valgte.size > 1) {
-                  await varsle(`📱 iPhone-tips:\n\niPhone støtter ikke å sende til flere på én gang via denne knappen.\n\nBruk «📋 Kopier»-knappen ved siden av, og lim numrene inn i «Til:»-feltet i iMessage.`);
-                  return;
-                }
-                sendSms();
-              }}>
-                💬 Send SMS ({valgte.size} mottaker{valgte.size === 1 ? "" : "e"})
-              </button>
-              <button style={{ ...sekKnapp, padding: "9px 14px", fontSize: 14 }}
-                title="iPhone: kopier og lim inn i Til:-feltet i iMessage"
-                onClick={async () => {
-                  const alleKontakter = kontakter || [];
-                  const numre = [...valgte]
-                    .map((id) => {
-                      const m = medlemmer.find((x) => x.id === id);
-                      if (m) return m.telefon;
-                      return alleKontakter.find((k) => k.id === id)?.telefon;
-                    })
-                    .filter(Boolean).map((t) => t.replace(/\s+/g, ""));
-                  try {
-                    await navigator.clipboard.writeText(numre.join(","));
-                    await varsle(`${numre.length} numre kopiert!\n\nLim dem inn i «Til:»-feltet i iMessage, trykk mellomrom etter siste nummer, skriv deretter meldingen.`);
-                  } catch (e) {
-                    await varsle(`Kopier disse numrene manuelt:\n\n${numre.join(",")}`);
-                  }
-                }}>
-                📋 Kopier
-              </button>
-            </div>
-          )}
-          {medTelefon.length === 0 && (
-            <p style={{ margin: 0, fontSize: 13, color: C.signal }}>Ingen medlemmer har registrert telefonnummer ennå.</p>
-          )}
-          {erAdmin && (
-            <div style={{ borderTop: `1px solid ${C.sand}`, paddingTop: 10, marginTop: 4 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>➕ Legg til ekstern kontakt</div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <input style={{ ...input, flex: 2, minWidth: 130 }} value={nyttKontaktNavn} onChange={(e) => setNyttKontaktNavn(e.target.value)} placeholder="Navn" />
-                <input type="tel" style={{ ...input, flex: 2, minWidth: 120 }} value={nyttKontaktTelefon} onChange={(e) => setNyttKontaktTelefon(e.target.value)} placeholder="Telefon" />
-                <button style={{ ...sekKnapp, padding: "8px 12px", fontSize: 13 }} onClick={() => {
-                  const n = nyttKontaktNavn.trim();
-                  const t = nyttKontaktTelefon.trim();
-                  if (n.length < 2 || !t) return;
-                  onLagreKontakter([...(kontakter || []), { id: nyId(), navn: n, telefon: t, epost: "", ekstern: true }]);
-                  setNyttKontaktNavn(""); setNyttKontaktTelefon("");
-                }}>Legg til</button>
-              </div>
-              <p style={{ margin: "5px 0 0", fontSize: 12, color: C.dempet }}>Eksterne kontakter kan legges til SMS-grupper men vises ikke i dugnadslisten.</p>
-            </div>
-          )}
-        </div>
-      )}
 
       {erAdmin && (
         <div style={kort}>
