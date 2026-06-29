@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.45";
+const APP_VERSJON = "3.5.46";
 const APP_OPPDATERT = "29.06.2026";
 
 const AKT_STANDARD = [
@@ -56,6 +56,7 @@ const K_GAMMEL = "askoy-kystlag-dugnad";
 const K_GRUPPER = "akl-grupper";
 const K_KONTAKTER = "akl-kontakter";
 const K_PUSHLOGG = "akl-pushlogg";
+const K_PUSHLEST = "akl-pushlest";
 const UTLEIE_STANDARD = {
   objekter: [
     { id: "lokale-a", navn: "Lokale 1", type: "lokale" },
@@ -190,6 +191,7 @@ export default function Dugnadsloggen() {
   const [grupper, setGrupper] = useState([]);
   const [kontakter, setKontakter] = useState([]);
   const [pushLogg, setPushLogg] = useState([]);
+  const [pushLest, setPushLest] = useState({});
   const [fotoCache, setFotoCache] = useState({});
 
   const [bruker, setBruker] = useState(null);
@@ -198,7 +200,7 @@ export default function Dugnadsloggen() {
   const [sjekkerSesjon, setSjekkerSesjon] = useState(true);
   const [fane, setFane] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    const gyldige = ["timer", "kalender", "prosjekter", "medlemmer", "logg", "rapport", "utleie", "admin"];
+    const gyldige = ["timer", "kalender", "prosjekter", "medlemmer", "varsler", "logg", "rapport", "utleie", "admin"];
     return gyldige.includes(hash) ? hash : "timer";
   });
   const [aapent, setAapent] = useState(null);
@@ -292,6 +294,11 @@ export default function Dugnadsloggen() {
       } catch (e) { /* ingen push-logg ennå */ }
 
       try {
+        const r = await window.storage.get(K_PUSHLEST, true);
+        if (r?.value) setPushLest(JSON.parse(r.value));
+      } catch (e) { /* ingen lest-status ennå */ }
+
+      try {
         const r = await window.storage.get(K_BACKUPINFO, true);
         if (r?.value) setSisteBackup(JSON.parse(r.value).dato || null);
       } catch (e) { /* ingen backup tatt ennå */ }
@@ -372,6 +379,15 @@ export default function Dugnadsloggen() {
   const loggPush = async (post) => {
     const ny = { id: nyId(), tidspunkt: new Date().toISOString(), sendtAv: bruker?.navn || "Ukjent", ...post };
     await lagrePushLogg([ny, ...pushLogg].slice(0, 200));
+  };
+  const lagrePushLest = lagre(K_PUSHLEST, setPushLest, "Kunne ikke lagre lest-status.");
+  // Marker varsler som lest for innlogget medlem
+  const markerVarslerLest = async (ider) => {
+    if (!bruker || !ider?.length) return;
+    const eksisterende = pushLest[bruker.id] || [];
+    const nye = [...new Set([...eksisterende, ...ider])];
+    if (nye.length === eksisterende.length) return; // ingenting nytt
+    await lagrePushLest({ ...pushLest, [bruker.id]: nye });
   };
   const lagreAktiviteter = lagre(K_AKT, setAktiviteter, "Kunne ikke lagre aktivitetslisten.");
   const lagreUtleie = lagre(K_UTLEIE, setUtleie, "Kunne ikke lagre utleiedataene.");
@@ -555,15 +571,23 @@ export default function Dugnadsloggen() {
   const serRapport = erAdmin; // Logg og Rapport vises kun for admin
   const aktivt = prosjekter.find((p) => p.id === aapent);
 
-  function Fane({ id, tekst }) {
+  function Fane({ id, tekst, badge }) {
     const a = fane === id;
     return (
       <button onClick={() => { setFane(id); window.location.hash = id; setAapent(null); setFeil(""); setInfo(""); }}
         style={{ flex: "1 0 auto", padding: "10px 7px", background: "transparent", border: "none", borderBottom: a ? `3px solid ${C.signal}` : "3px solid transparent", color: a ? C.kritt : "rgba(247,245,240,0.6)", fontWeight: a ? 700 : 500, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap" }}>
         {tekst}
+        {badge > 0 && (
+          <span style={{ marginLeft: 5, background: C.signal, color: "#fff", borderRadius: 9, padding: "1px 6px", fontSize: 10.5, fontWeight: 700, verticalAlign: "middle" }}>{badge > 99 ? "99+" : badge}</span>
+        )}
       </button>
     );
   }
+
+  // Varsler som gjelder innlogget medlem, og hvor mange som er ulest
+  const varslerForMeg = (pushLogg || []).filter((p) => !Array.isArray(p.mottakerIder) || p.mottakerIder.includes(bruker?.id));
+  const mineLeste = pushLest[bruker?.id] || [];
+  const ulesteVarsler = varslerForMeg.filter((p) => !mineLeste.includes(p.id)).length;
 
   return (
     <div style={{ minHeight: "100vh", background: C.kritt, fontFamily: "'Helvetica Neue', Arial, sans-serif", color: C.tjaere }}>
@@ -598,6 +622,7 @@ export default function Dugnadsloggen() {
             <Fane id="kalender" tekst="Dugnadskalender" />
             <Fane id="prosjekter" tekst="Prosjekter" />
             <Fane id="medlemmer" tekst="Medlemmer" />
+            <Fane id="varsler" tekst="Varsler" badge={ulesteVarsler} />
             {erAdmin && <Fane id="logg" tekst="Logg" />}
             {serRapport && <Fane id="rapport" tekst="Rapport" />}
             {serUtleie && <Fane id="utleie" tekst="Utleie" />}
@@ -670,6 +695,13 @@ export default function Dugnadsloggen() {
               setInfo(`Førte ${nyeInnslag.length} timeregistrering${nyeInnslag.length === 1 ? "" : "er"} for de oppmøtte.`);
             }}
             stil={stil}
+          />
+        )}
+
+        {fane === "varsler" && (
+          <VarslerInnboks
+            pushLogg={pushLogg} bruker={bruker} pushLest={pushLest}
+            onMarkerLest={markerVarslerLest} stil={stil}
           />
         )}
 
@@ -1077,6 +1109,7 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                         omfang: gruppe ? "gruppe" : "alle",
                         gruppeNavn: gruppe ? gruppe.navn : null,
                         mottakere: mottakereNavn,
+                        mottakerIder: gruppe ? (gruppe.medlemmer || []) : null,
                         antall: data.recipients ?? null,
                       });
                       setPushStatus({ ok: true, antall: data.recipients || "?" }); setPushTittel(""); setPushMelding("");
@@ -1300,46 +1333,42 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
         {filtrert.map((m) => (
           <div key={m.id}
             onClick={() => smsModus && m.telefon && toggleValgt(m.id)}
-            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "nowrap", minHeight: 58,
               cursor: smsModus && m.telefon ? "pointer" : "default",
               borderColor: smsModus && valgte.has(m.id) ? C.hav : undefined,
               borderWidth: smsModus && valgte.has(m.id) ? 2 : 1,
               background: smsModus && valgte.has(m.id) ? "#EAF0F5" : undefined,
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
               {smsModus && (
                 <input type="checkbox" checked={valgte.has(m.id)} disabled={!m.telefon}
                   onChange={() => m.telefon && toggleValgt(m.id)}
-                  style={{ width: 18, height: 18, cursor: m.telefon ? "pointer" : "not-allowed", accentColor: C.hav }} />
+                  style={{ width: 18, height: 18, flexShrink: 0, cursor: m.telefon ? "pointer" : "not-allowed", accentColor: C.hav }} />
               )}
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {m.navn}{m.id === bruker.id ? " (deg)" : ""}
                   {m.admin && <span style={{ marginLeft: 8, fontSize: 10.5, background: C.hav, color: C.kritt, borderRadius: 4, padding: "2px 6px", letterSpacing: "0.05em" }}>ADMIN</span>}
                 </div>
-                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{m.epost || "ingen e-post"}</div>
+                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.epost || "ingen e-post"}</div>
+                <div style={{ fontSize: 13, color: m.telefon ? C.tjaere : C.dempet, marginTop: 2 }}>{m.telefon || "Ingen telefon"}</div>
               </div>
             </div>
-            {!smsModus && (
-              m.telefon ? (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <a href={`tel:${m.telefon.replace(/\s+/g, "")}`}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 5, background: C.sjogronn, color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
-                    📞 {m.telefon}
-                  </a>
-                  <a href={`sms:${m.telefon.replace(/\s+/g, "")}`}
-                    style={{ display: "inline-flex", alignItems: "center", background: C.hav, color: "#fff", borderRadius: 6, padding: "8px 12px", fontSize: 16, textDecoration: "none" }}
-                    title="Send SMS">
-                    💬
-                  </a>
-                </div>
-              ) : (
-                <span style={{ fontSize: 13, color: C.dempet }}>Ingen telefon</span>
-              )
+            {!smsModus && m.telefon && (
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <a href={`tel:${m.telefon.replace(/\s+/g, "")}`} title={`Ring ${m.telefon}`}
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 42, height: 42, background: C.sjogronn, color: "#fff", borderRadius: 8, fontSize: 18, textDecoration: "none" }}>
+                  📞
+                </a>
+                <a href={`sms:${m.telefon.replace(/\s+/g, "")}`} title="Send SMS"
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 42, height: 42, background: C.hav, color: "#fff", borderRadius: 8, fontSize: 18, textDecoration: "none" }}>
+                  💬
+                </a>
+              </div>
             )}
             {smsModus && (
-              <span style={{ fontSize: 13, color: m.telefon ? C.tjaere : C.dempet, fontWeight: m.telefon ? 600 : 400 }}>
-                {m.telefon || "ingen telefon"}
+              <span style={{ flexShrink: 0, fontSize: 18, color: C.hav, width: 24, textAlign: "center" }}>
+                {valgte.has(m.id) ? "✓" : ""}
               </span>
             )}
           </div>
@@ -1349,21 +1378,22 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
         {smsModus && (kontakter || []).filter((k) => k.telefon).map((k) => (
           <div key={k.id}
             onClick={() => toggleValgt(k.id)}
-            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+            style={{ ...kort, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "nowrap", minHeight: 58,
               cursor: "pointer",
               borderColor: valgte.has(k.id) ? C.hav : undefined,
               borderWidth: valgte.has(k.id) ? 2 : 1,
               background: valgte.has(k.id) ? "#EAF0F5" : undefined,
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
               <input type="checkbox" checked={valgte.has(k.id)} onChange={() => toggleValgt(k.id)}
-                style={{ width: 18, height: 18, cursor: "pointer", accentColor: C.hav }} />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{k.navn} <span style={{ fontSize: 11, color: C.dempet, fontWeight: 400 }}>📋 ekstern</span></div>
-                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2 }}>{k.epost || "ingen e-post"}</div>
+                style={{ width: 18, height: 18, flexShrink: 0, cursor: "pointer", accentColor: C.hav }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.navn} <span style={{ fontSize: 11, color: C.dempet, fontWeight: 400 }}>📋 ekstern</span></div>
+                <div style={{ fontSize: 13, color: C.dempet, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k.epost || "ingen e-post"}</div>
+                <div style={{ fontSize: 13, color: C.tjaere, marginTop: 2 }}>{k.telefon}</div>
               </div>
             </div>
-            <span style={{ fontSize: 13, color: C.tjaere, fontWeight: 600 }}>{k.telefon}</span>
+            <span style={{ flexShrink: 0, fontSize: 18, color: C.hav, width: 24, textAlign: "center" }}>{valgte.has(k.id) ? "✓" : ""}</span>
           </div>
         ))}
       </div>
@@ -2083,12 +2113,14 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
     };
 
     let mottakereNavn = null; // null = alle medlemmer; ellers liste med navn
+    let mottakerIder = null;  // null = alle; ellers liste med medlems-id
     if (omfang === "prosjekt" && d.prosjektId) {
       const ider = medlemmerForProsjekt(d.prosjektId);
       if (ider.length === 0) {
         await varsle("Fant ingen medlemmer tilknyttet prosjektet å sende push til.");
         return;
       }
+      mottakerIder = ider;
       mottakereNavn = ider.map((id) => navnFor(id));
       // Målrett kun til prosjektets medlemmer via bruker_id-taggen
       const filters = [];
@@ -2116,8 +2148,9 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
           kilde: "Kalender",
           tittel: "Ny dugnad planlagt! 🔨",
           melding: innhold,
-          omfang: mottakereNavn ? "prosjekt" : "alle",
+          omfang: mottakerIder ? "prosjekt" : "alle",
           mottakere: mottakereNavn,
+          mottakerIder: mottakerIder,
           antall: data.recipients ?? null,
         });
         await varsle(`📲 Push sendt til ${data.recipients ?? "?"} mottakere.`);
@@ -3261,6 +3294,53 @@ function InnslagBilder({ innslag, C }) {
 // ============================================================
 // Logg
 // ============================================================
+
+// Medlemmenes egen varslings-innboks med uleste-merke
+function VarslerInnboks({ pushLogg, bruker, pushLest, onMarkerLest, stil }) {
+  const { C } = stil;
+  const gjelderMeg = (p) => !Array.isArray(p.mottakerIder) || p.mottakerIder.includes(bruker?.id);
+  const mine = (pushLogg || []).filter(gjelderMeg);
+  const lest = pushLest?.[bruker?.id] || [];
+  const ulesteIder = mine.filter((p) => !lest.includes(p.id)).map((p) => p.id);
+
+  // Marker som lest når innboksen åpnes / nye varsler kommer inn
+  useEffect(() => {
+    if (ulesteIder.length > 0) onMarkerLest(ulesteIder);
+  }, [ulesteIder.join(",")]);
+
+  const fTidspunkt = (iso) => {
+    try {
+      return new Date(iso).toLocaleString("nb-NO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  };
+
+  return (
+    <section>
+      <h2 style={{ fontFamily: "Georgia, serif", fontSize: 20, margin: "0 0 14px" }}>Varsler</h2>
+      {mine.length === 0 ? (
+        <p style={{ color: C.dempet, textAlign: "center", padding: 28 }}>Du har ingen varsler ennå.</p>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {mine.map((p) => {
+            const uleste = !lest.includes(p.id);
+            return (
+              <div key={p.id} style={{ background: uleste ? "#EAF0F5" : "#fff", border: `1px solid ${C.sand}`, borderLeft: `4px solid ${uleste ? C.signal : C.sand}`, borderRadius: 8, padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700, fontSize: 15 }}>
+                    {uleste && <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: C.signal, marginRight: 7 }} />}
+                    {p.tittel || "(uten tittel)"}
+                  </span>
+                  <span style={{ fontSize: 12, color: C.dempet }}>{fTidspunkt(p.tidspunkt)}</span>
+                </div>
+                {p.melding && <div style={{ fontSize: 14, color: C.tjaere, marginTop: 4 }}>{p.melding}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
 // Visning av sendte push-varsler (hvem de gikk til)
 function PushLoggVisning({ pushLogg, C }) {
