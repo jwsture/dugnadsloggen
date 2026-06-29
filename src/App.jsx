@@ -10,6 +10,26 @@ window.OneSignalDeferred.push(async function(OneSignal) {
     safari_web_id: "web.onesignal.auto.10292181-f5a7-4920-9ee0-daa939b7c9fb",
     notifyButton: { enable: false },
     allowLocalhostAsSecureOrigin: true,
+    promptOptions: {
+      slidedown: {
+        prompts: [
+          {
+            type: "push",
+            autoPrompt: false,
+            text: {
+              // actionMessage maks 90 tegn, knapper maks 15 tegn
+              actionMessage: "Vil du få beskjed når det er nye dugnader eller nyheter fra Askøy Kystlag?",
+              acceptButton: "Ja, takk!",
+              cancelButton: "Ikke nå",
+            },
+          },
+        ],
+      },
+    },
+    welcomeNotification: {
+      title: "Askøy Kystlag",
+      message: "Takk! Nå får du beskjed når det skjer noe nytt.",
+    },
   });
 });
 
@@ -29,7 +49,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.46";
+const APP_VERSJON = "3.5.47";
 const APP_OPPDATERT = "29.06.2026";
 
 const AKT_STANDARD = [
