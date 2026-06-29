@@ -29,8 +29,8 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.43";
-const APP_OPPDATERT = "20.06.2026";
+const APP_VERSJON = "3.5.44";
+const APP_OPPDATERT = "29.06.2026";
 
 const AKT_STANDARD = [
   "Båtvedlikehold",
@@ -2042,6 +2042,52 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
     a.click();
   }
 
+  async function sendPushVarsel(d, omfang) {
+    const innhold = `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}`;
+    const pushBody = {
+      app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
+      headings: { en: "Ny dugnad planlagt! 🔨", nb: "Ny dugnad planlagt! 🔨" },
+      contents: { en: innhold, nb: innhold },
+      url: "https://askoy-kystlag.vercel.app/#kalender",
+    };
+
+    if (omfang === "prosjekt" && d.prosjektId) {
+      const ider = medlemmerForProsjekt(d.prosjektId);
+      if (ider.length === 0) {
+        await varsle("Fant ingen medlemmer tilknyttet prosjektet å sende push til.");
+        return;
+      }
+      // Målrett kun til prosjektets medlemmer via bruker_id-taggen
+      const filters = [];
+      ider.forEach((id, i) => {
+        if (i > 0) filters.push({ operator: "OR" });
+        filters.push({ field: "tag", key: "bruker_id", relation: "=", value: id });
+      });
+      pushBody.filters = filters;
+    } else {
+      pushBody.included_segments = ["All"];
+    }
+
+    try {
+      const resp = await fetch("https://onesignal.com/api/v1/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Key ${import.meta.env.VITE_ONESIGNAL_API_KEY}`,
+        },
+        body: JSON.stringify(pushBody),
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        await varsle(`📲 Push sendt til ${data.recipients ?? "?"} mottakere.`);
+      } else {
+        await varsle(`Kunne ikke sende push: ${data.errors?.[0] || "ukjent feil"}`);
+      }
+    } catch (e) {
+      await varsle(`Kunne ikke sende push: ${e.message}`);
+    }
+  }
+
   function tomSkjema() {
     setTittel(""); setDato(""); setTid(""); setTidSlutt(""); setSted(""); setBeskrivelse(""); setProsjektId("");
     setRedigerId(null); setViserSkjema(false); setFeil("");
@@ -2090,31 +2136,6 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
     };
     await onLagre([...dugnader, d]);
     setNettopOpprettetVarsel(d);
-
-    // Send push-varsel til alle om ny dugnad
-    try {
-      const apiKey = import.meta.env.VITE_ONESIGNAL_API_KEY;
-      console.log("OneSignal API key tilgjengelig:", !!apiKey, apiKey?.slice(0, 10));
-      const resp = await fetch("https://onesignal.com/api/v1/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Key ${apiKey}`
-        },
-        body: JSON.stringify({
-          app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
-          included_segments: ["All"],
-          headings: { en: "Ny dugnad planlagt! 🔨", nb: "Ny dugnad planlagt! 🔨" },
-          contents: { en: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}`, nb: `${d.tittel} — ${fDato(d.dato)}${d.tid ? ` kl. ${d.tid}` : ""}${d.sted ? ` · ${d.sted}` : ""}` },
-          url: "https://askoy-kystlag.vercel.app/#kalender",
-        }),
-      });
-      const respData = await resp.json();
-      console.log("OneSignal svar:", resp.status, respData);
-    } catch (e) {
-      console.error("OneSignal feil:", e);
-    }
-
     tomSkjema();
   }
 
@@ -2326,14 +2347,17 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
             {nettopOpprettetVarsel.prosjektId && <option value="prosjekt">Bare medlemmer tilknyttet prosjektet</option>}
           </select>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button style={{ ...primKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => { sendEpostVarsel(nettopOpprettetVarsel, varselMottakere); setNettopOpprettetVarsel(null); }}>
+            <button style={{ ...primKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => { sendPushVarsel(nettopOpprettetVarsel, varselMottakere); }}>
+              📲 Send push
+            </button>
+            <button style={{ ...sekKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => { sendEpostVarsel(nettopOpprettetVarsel, varselMottakere); setNettopOpprettetVarsel(null); }}>
               📧 Send varsel på e-post
             </button>
             <button style={{ ...sekKnapp, padding: "9px 16px", fontSize: 14 }} onClick={() => setNettopOpprettetVarsel(null)}>
               Hopp over
             </button>
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Åpner e-postappen din med mottakerne ferdig fylt inn (skjult for hverandre).</p>
+          <p style={{ margin: 0, fontSize: 12, color: C.dempet }}>Push sendes til de du velger over. E-post åpner e-postappen din med mottakerne ferdig fylt inn (skjult for hverandre).</p>
         </div>
       )}
 
