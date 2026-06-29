@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.39";
+const APP_VERSJON = "3.5.40";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -918,6 +918,11 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
   const [utskriftGruppe, setUtskriftGruppe] = useState("");
   const [visKontakter, setVisKontakter] = useState(false);
   const [nyttKontaktNavn, setNyttKontaktNavn] = useState("");
+  // Push-varsler
+  const [pushTittel, setPushTittel] = useState("");
+  const [pushMelding, setPushMelding] = useState("");
+  const [pushJobber, setPushJobber] = useState(false);
+  const [pushStatus, setPushStatus] = useState(null);
   const [nyttKontaktTelefon, setNyttKontaktTelefon] = useState("");
   const [nyttKontaktEpost, setNyttKontaktEpost] = useState("");
   const [visImport, setVisImport] = useState(false);
@@ -972,6 +977,56 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
+
+      {/* Kommunikasjon */}
+      {erAdmin && (
+        <div style={kort}>
+          <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>📣 Kommunikasjon</h2>
+          <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>Send push-varsel eller SMS til medlemmene.</p>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div>
+              <label style={etikett}>Tittel</label>
+              <input style={input} value={pushTittel} onChange={(e) => setPushTittel(e.target.value)} placeholder="f.eks. Dugnad i morgen!" />
+            </div>
+            <div>
+              <label style={etikett}>Melding</label>
+              <textarea style={{ ...input, minHeight: 70, resize: "vertical" }} value={pushMelding} onChange={(e) => setPushMelding(e.target.value)} placeholder="f.eks. Husk oppmøte kl. 10 ved Kystbua!" />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={{ ...primKnapp, flex: 1, opacity: pushJobber ? 0.6 : 1 }}
+                disabled={pushJobber || !pushTittel.trim() || !pushMelding.trim()}
+                onClick={async () => {
+                  setPushJobber(true); setPushStatus(null);
+                  try {
+                    const resp = await fetch("https://onesignal.com/api/v1/notifications", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json", "Authorization": `Key ${import.meta.env.VITE_ONESIGNAL_API_KEY}` },
+                      body: JSON.stringify({
+                        app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
+                        included_segments: ["All"],
+                        headings: { en: pushTittel.trim(), nb: pushTittel.trim() },
+                        contents: { en: pushMelding.trim(), nb: pushMelding.trim() },
+                        url: "https://askoy-kystlag.vercel.app",
+                      }),
+                    });
+                    const data = await resp.json();
+                    if (resp.ok) { setPushStatus({ ok: true, antall: data.recipients || "?" }); setPushTittel(""); setPushMelding(""); }
+                    else { setPushStatus({ ok: false, feil: data.errors?.[0] || "Ukjent feil" }); }
+                  } catch (e) { setPushStatus({ ok: false, feil: e.message }); }
+                  setPushJobber(false);
+                }}>
+                {pushJobber ? "Sender …" : "📣 Send push til alle"}
+              </button>
+            </div>
+            {pushStatus && (
+              <div style={{ background: pushStatus.ok ? "#EAF3EC" : "#FBEAE8", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: pushStatus.ok ? "#2F5A3C" : C.signal, fontWeight: 600 }}>
+                {pushStatus.ok ? `✓ Sendt til ${pushStatus.antall} abonnenter!` : `Feil: ${pushStatus.feil}`}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={kort}>
         <h2 style={{ margin: "0 0 4px", fontFamily: "Georgia, serif", fontSize: 18 }}>Medlemsregister</h2>
         <p style={{ margin: "0 0 12px", fontSize: 13, color: C.dempet }}>
