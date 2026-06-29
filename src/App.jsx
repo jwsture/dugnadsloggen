@@ -1037,6 +1037,8 @@ function MedlemsRegister({ medlemmer, bruker, grupper, prosjekter, innslag, kont
                       headings: { en: pushTittel.trim(), nb: pushTittel.trim() },
                       contents: { en: pushMelding.trim(), nb: pushMelding.trim() },
                       url: "https://askoy-kystlag.vercel.app/",
+                    };
+                    if (erGruppe) {
                       body.filters = [{ field: "tag", key: `gruppe_${pushGruppe}`, relation: "=", value: "true" }];
                     } else {
                       body.included_segments = ["All"];
