@@ -29,7 +29,7 @@ const C = {
 
 // Bump dette tallet (og datoen) hver gang du får en ny App.jsx fra Claude.
 // Vises i Admin-fanen, slik at du enkelt kan se om oppdateringen har slått gjennom.
-const APP_VERSJON = "3.5.37";
+const APP_VERSJON = "3.5.38";
 const APP_OPPDATERT = "20.06.2026";
 
 const AKT_STANDARD = [
@@ -2028,11 +2028,13 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
 
     // Send push-varsel til alle om ny dugnad
     try {
-      await fetch("https://onesignal.com/api/v1/notifications", {
+      const apiKey = import.meta.env.VITE_ONESIGNAL_API_KEY;
+      console.log("OneSignal API key tilgjengelig:", !!apiKey, apiKey?.slice(0, 10));
+      const resp = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Key ${import.meta.env.VITE_ONESIGNAL_API_KEY}`
+          "Authorization": `Key ${apiKey}`
         },
         body: JSON.stringify({
           app_id: "10292181-f5a7-4920-9ee0-daa939b7c9fb",
@@ -2042,7 +2044,11 @@ function Kalender({ dugnader, medlemmer, prosjekter, innslag, bruker, erAdmin, a
           url: "https://askoy-kystlag.vercel.app",
         }),
       });
-    } catch (e) { /* push er valgfritt */ }
+      const respData = await resp.json();
+      console.log("OneSignal svar:", resp.status, respData);
+    } catch (e) {
+      console.error("OneSignal feil:", e);
+    }
 
     tomSkjema();
   }
